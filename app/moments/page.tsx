@@ -15,8 +15,11 @@ export default function MomentsPage() {
   const [capture, setCapture] = useState(false);
   const [gameFilter, setGameFilter] = useState<string | null>(null);
 
+  // 최신순 정렬
   const moments = useMemo(() => {
-    const ms = todayClips.filter((c) => c.kind === "moment" || c.kind === "quest");
+    const ms = todayClips
+      .filter((c) => c.kind === "moment" || c.kind === "quest")
+      .sort((a, b) => b.hour - a.hour || b.minute - a.minute);
     return gameFilter ? ms.filter((c) => c.gameId === gameFilter) : ms;
   }, [todayClips, gameFilter]);
 
