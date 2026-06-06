@@ -221,7 +221,7 @@ function MobileNav() {
 function Toasts() {
   const { toasts } = useStore();
   return (
-    <div className="pointer-events-none fixed bottom-20 right-4 z-[100] flex flex-col gap-2">
+    <div className="pointer-events-none absolute bottom-20 right-4 z-[100] flex flex-col gap-2">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -258,12 +258,15 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
   const { ready } = useStore();
   if (!ready) return <LoadingScreen />;
   return (
-    <div className="flex h-dvh flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1">
-        <main className="flex min-w-0 flex-1 flex-col bg-bg-primary">{children}</main>
+    // 데스크톱: 9:16 폰 프레임으로 모바일과 동일한 비율 · 모바일: 전체 화면
+    <div className="flex h-dvh items-center justify-center overflow-hidden bg-bg-tertiary md:py-4">
+      <div className="relative flex h-full w-full flex-col overflow-hidden bg-bg-primary md:aspect-[9/16] md:w-auto md:rounded-[20px] md:shadow-elev-high md:ring-1 md:ring-bg-modifier">
+        <div className="flex min-h-0 flex-1">
+          <main className="flex min-w-0 flex-1 flex-col bg-bg-primary">{children}</main>
+        </div>
+        <MobileNav />
+        <Toasts />
       </div>
-      <MobileNav />
-      <Toasts />
     </div>
   );
 }
