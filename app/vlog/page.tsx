@@ -120,7 +120,7 @@ export default function VlogPage() {
               </div>
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {clips.map((c) => (
-                  <ClipCard key={c.id} clip={c} />
+                  <ClipCard key={c.id} clip={c} showGameTag={false} />
                 ))}
               </div>
             </section>

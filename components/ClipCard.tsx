@@ -33,7 +33,7 @@ export function ClipMedia({ clip, className }: { clip: Clip; className?: string 
   );
 }
 
-export function ClipCard({ clip }: { clip: Clip }) {
+export function ClipCard({ clip, showGameTag = true }: { clip: Clip; showGameTag?: boolean }) {
   const { toggleReaction } = useStore();
   const [picker, setPicker] = useState(false);
   const member = MEMBERS.find((m) => m.id === clip.memberId)!;
@@ -43,12 +43,14 @@ export function ClipCard({ clip }: { clip: Clip }) {
     <article className="card animate-fade-in overflow-hidden p-0">
       <div className="relative aspect-[4/3]">
         <ClipMedia clip={clip} />
-        <span
-          className="absolute left-2 top-2 rounded-full px-2 py-0.5 text-xxs font-bold text-white"
-          style={{ background: `${game.color}E6` }}
-        >
-          {game.emoji} {game.short}
-        </span>
+        {showGameTag && (
+          <span
+            className="absolute left-2 top-2 rounded-full px-2 py-0.5 text-xxs font-bold text-white"
+            style={{ background: `${game.color}E6` }}
+          >
+            {game.emoji} {game.short}
+          </span>
+        )}
         <span className="absolute right-2 top-2 rounded-full bg-black/50 px-2 py-0.5 text-xxs font-semibold text-white">
           {fmtTime(clip.hour, clip.minute)}
         </span>
