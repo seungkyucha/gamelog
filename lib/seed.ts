@@ -15,7 +15,9 @@ export const GAMES: Game[] = [
     cover: "https://upload.wikimedia.org/wikipedia/en/f/fb/The_Legend_of_Zelda_Tears_of_the_Kingdom_cover.jpg" },
   { id: "eldenring", name: "엘든링", short: "ER", color: "#C9A86A", emoji: "💍",
     cover: "https://cdn.cloudflare.steamstatic.com/steam/apps/1245620/library_600x900.jpg" },
-  { id: "tbh", name: "Task Bar Heroes", short: "TBH", color: "#7B68EE", emoji: "🦸" },
+  // Steam appid 3678970 — "TBH: 태스크바 히어로"
+  { id: "tbh", name: "TBH: 태스크바 히어로", short: "TBH", color: "#7B68EE", emoji: "🦸",
+    cover: "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/3678970/be640d1ea4db8d9139069e3799d8d4553f0c2131/header.jpg" },
 ];
 
 export const ME_ID = "me";
