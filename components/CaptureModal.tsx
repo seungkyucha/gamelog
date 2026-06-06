@@ -50,7 +50,8 @@ export function CaptureModal({
     streamRef.current?.getTracks().forEach((t) => t.stop());
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: face },
+        // 서버 업로드 한도(1MB)에 맞춰 해상도 제한
+        video: { facingMode: face, width: { ideal: 640 }, height: { ideal: 480 } },
         audio: false,
       });
       if (cancelledRef.current) {
@@ -100,11 +101,13 @@ export function CaptureModal({
     if (!stream) return;
     const chunks: BlobPart[] = [];
     let recorder: MediaRecorder;
+    // 비트레이트 제한: 5초 클립도 서버 업로드 한도(1MB) 안에 들어오도록
+    const opts = { videoBitsPerSecond: 800_000 };
     try {
-      recorder = new MediaRecorder(stream, { mimeType: "video/webm" });
+      recorder = new MediaRecorder(stream, { mimeType: "video/webm", ...opts });
     } catch {
       try {
-        recorder = new MediaRecorder(stream);
+        recorder = new MediaRecorder(stream, opts);
       } catch {
         setPhase("nocam");
         return;

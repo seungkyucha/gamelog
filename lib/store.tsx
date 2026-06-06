@@ -24,6 +24,8 @@ import type { CheckIn, Clip, ClipKind, DiaryEntry, Integrations, PersistedState,
 import { uid } from "./utils";
 
 const LS_KEY = "gamelog-state-v1";
+const REMOTE_PREFIX = "remote:";
+const SYNC_INTERVAL_MS = 30_000;
 
 interface Toast {
   id: string;
@@ -43,9 +45,7 @@ interface StoreValue {
   ready: boolean;
   today: string;
   now: Date;
-  /** 오늘의 모든 클립 (시드 + 사용자, 시간순) */
   todayClips: Clip[];
-  /** 모든 moment 클립 (오늘 기준) */
   diary: DiaryEntry[];
   questDoneToday: string[];
   streak: { count: number; lastDate: string };
@@ -86,45 +86,188 @@ function loadPersisted(): PersistedState {
   }
 }
 
+/** 서버 푸시/로컬 저장용 — blob URL과 업로드 실패한 대용량 dataURL 미디어는 제외 */
 function stripForSave(s: PersistedState): PersistedState {
+  const stripMedia = (v?: string) => (v?.startsWith("data:") ? undefined : v);
   return {
     ...s,
     userClips: s.userClips.map((c) => ({ ...c, videoUrl: undefined })),
+    checkIns: Object.fromEntries(
+      Object.entries(s.checkIns).map(([k, ci]) => [
+        k,
+        { ...ci, selfie: stripMedia(ci.selfie), screen: stripMedia(ci.screen), rear: stripMedia(ci.rear) },
+      ])
+    ),
   };
+}
+
+/** 두 상태의 가산적 병합 — 어느 기기의 업로드도 사라지지 않게 합집합 기준 */
+function mergeStates(a: PersistedState, b: PersistedState): PersistedState {
+  const clipIds = new Set(a.userClips.map((c) => c.id));
+  const diaryIds = new Set(a.userDiary.map((d) => d.id));
+
+  const questDone: Record<string, string[]> = { ...b.questDone };
+  for (const [k, v] of Object.entries(a.questDone)) {
+    questDone[k] = [...new Set([...(questDone[k] ?? []), ...v])];
+  }
+
+  const streak =
+    a.streak.lastDate > b.streak.lastDate
+      ? a.streak
+      : b.streak.lastDate > a.streak.lastDate
+        ? b.streak
+        : a.streak.count >= b.streak.count
+          ? a.streak
+          : b.streak;
+
+  // 체크인: 날짜별로 합치되, 원격 미디어를 가진 쪽 우선 (다른 기기에서도 보이는 버전)
+  const hasRemote = (ci: CheckIn) =>
+    [ci.selfie, ci.screen, ci.rear].some((v) => v?.startsWith(REMOTE_PREFIX));
+  const checkIns: Record<string, CheckIn> = { ...b.checkIns };
+  for (const [k, v] of Object.entries(a.checkIns)) {
+    const other = checkIns[k];
+    checkIns[k] = other && hasRemote(other) && !hasRemote(v) ? other : v;
+  }
+
+  return {
+    userClips: [...a.userClips, ...b.userClips.filter((c) => !clipIds.has(c.id))],
+    userDiary: [...a.userDiary, ...b.userDiary.filter((d) => !diaryIds.has(d.id))],
+    reactionOverrides: { ...b.reactionOverrides, ...a.reactionOverrides },
+    questDone,
+    streak,
+    checkIns,
+    joinRequests: [...new Set([...a.joinRequests, ...b.joinRequests])],
+    integrations: { ...b.integrations, ...a.integrations },
+  };
+}
+
+// ---- 서버 동기화 API ----
+
+async function fetchServerState(): Promise<PersistedState | null> {
+  try {
+    const r = await fetch("/api/state", { cache: "no-store" });
+    if (!r.ok) return null;
+    const j = (await r.json()) as Partial<PersistedState> | null;
+    return j ? { ...DEFAULT_PERSISTED, ...j } : null;
+  } catch {
+    return null;
+  }
+}
+
+async function pushServerState(s: PersistedState): Promise<void> {
+  try {
+    await fetch("/api/state", { method: "POST", body: JSON.stringify(stripForSave(s)) });
+  } catch {
+    /* 오프라인 — 로컬에만 저장 */
+  }
+}
+
+async function uploadMedia(dataUrl: string): Promise<string | null> {
+  try {
+    const r = await fetch("/api/media", { method: "POST", body: dataUrl });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { id?: string };
+    return j.id ? REMOTE_PREFIX + j.id : null;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchMedia(marker: string): Promise<string | null> {
+  try {
+    const id = marker.slice(REMOTE_PREFIX.length);
+    const r = await fetch(`/api/media?id=${id}`);
+    if (!r.ok) return null;
+    return await r.text();
+  } catch {
+    return null;
+  }
+}
+
+function blobToDataUrl(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(blob);
+  });
 }
 
 export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [ready, setReady] = useState(false);
   const [persisted, setPersisted] = useState<PersistedState>(DEFAULT_PERSISTED);
-  const [videoUrls, setVideoUrls] = useState<Record<string, string>>({});
+  /** videoKey/remote 마커 → 재생 가능한 URL(objectURL 또는 dataURL) */
+  const [mediaCache, setMediaCache] = useState<Record<string, string>>({});
   const [toasts, setToasts] = useState<Toast[]>([]);
   const [now, setNow] = useState(() => new Date());
   const persistedRef = useRef(persisted);
   persistedRef.current = persisted;
+  const pushTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const today = todayKey();
 
-  // hydrate
+  // ---- 초기 로드: 로컬 + 서버 병합 ----
   useEffect(() => {
-    const p = loadPersisted();
-    setPersisted(p);
-    setReady(true);
-    // IndexedDB에서 영상 URL 복원
+    let cancelled = false;
     (async () => {
-      const urls: Record<string, string> = {};
-      for (const c of p.userClips) {
-        if (c.videoKey) {
+      const local = loadPersisted();
+      const server = await fetchServerState();
+      if (cancelled) return;
+      const merged = server ? mergeStates(local, server) : local;
+      setPersisted(merged);
+      setReady(true);
+      // IndexedDB 로컬 영상 복원
+      for (const c of merged.userClips) {
+        if (c.videoKey && !c.videoKey.startsWith(REMOTE_PREFIX)) {
           const u = await getVideoUrl(c.videoKey);
-          if (u) urls[c.videoKey] = u;
+          if (u && !cancelled) setMediaCache((m) => ({ ...m, [c.videoKey!]: u }));
         }
       }
-      if (Object.keys(urls).length) setVideoUrls(urls);
     })();
     const t = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(t);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
   }, []);
 
-  // persist
+  // ---- 주기적 서버 동기화 (다른 기기 업로드 반영) ----
+  useEffect(() => {
+    if (!ready) return;
+    const t = setInterval(async () => {
+      const server = await fetchServerState();
+      if (!server) return;
+      const current = persistedRef.current;
+      const merged = mergeStates(current, server);
+      if (JSON.stringify(stripForSave(merged)) !== JSON.stringify(stripForSave(current))) {
+        setPersisted(merged);
+      }
+    }, SYNC_INTERVAL_MS);
+    return () => clearInterval(t);
+  }, [ready]);
+
+  // ---- 원격 미디어 다운로드 (캐시에 없는 remote: 마커) ----
+  useEffect(() => {
+    if (!ready) return;
+    const markers = new Set<string>();
+    for (const c of persisted.userClips) {
+      if (c.videoKey?.startsWith(REMOTE_PREFIX)) markers.add(c.videoKey);
+    }
+    for (const ci of Object.values(persisted.checkIns)) {
+      for (const v of [ci.selfie, ci.screen, ci.rear]) {
+        if (v?.startsWith(REMOTE_PREFIX)) markers.add(v);
+      }
+    }
+    for (const m of markers) {
+      if (mediaCache[m]) continue;
+      fetchMedia(m).then((data) => {
+        if (data) setMediaCache((cache) => ({ ...cache, [m]: data }));
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ready, persisted]);
+
+  // ---- 저장: 로컬 즉시 + 서버 디바운스 푸시 ----
   useEffect(() => {
     if (!ready) return;
     try {
@@ -132,6 +275,11 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } catch {
       /* quota 초과 시 무시 */
     }
+    if (pushTimer.current) clearTimeout(pushTimer.current);
+    pushTimer.current = setTimeout(() => pushServerState(persistedRef.current), 1200);
+    return () => {
+      if (pushTimer.current) clearTimeout(pushTimer.current);
+    };
   }, [persisted, ready]);
 
   const pushToast = useCallback((message: string, emoji?: string) => {
@@ -140,38 +288,51 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     setTimeout(() => setToasts((t) => t.filter((x) => x.id !== id)), 3500);
   }, []);
 
-  const addClip = useCallback(
-    async (input: AddClipInput) => {
-      const d = new Date();
-      const videoKey = input.blob ? `video-${uid()}` : undefined;
-      if (input.blob && videoKey) {
+  const addClip = useCallback(async (input: AddClipInput) => {
+    const d = new Date();
+    let videoKey: string | undefined;
+    if (input.blob) {
+      // 1순위: 서버 업로드 (모든 기기에서 보임) · 2순위: IndexedDB (이 기기 전용)
+      try {
+        const dataUrl = await blobToDataUrl(input.blob);
+        if (dataUrl.length < 900_000) {
+          const marker = await uploadMedia(dataUrl);
+          if (marker) {
+            videoKey = marker;
+            setMediaCache((m) => ({ ...m, [marker]: dataUrl }));
+          }
+        }
+      } catch {
+        /* 변환 실패 → 로컬 폴백 */
+      }
+      if (!videoKey) {
+        videoKey = `video-${uid()}`;
         try {
           await putVideo(videoKey, input.blob);
           const url = URL.createObjectURL(input.blob);
-          setVideoUrls((u) => ({ ...u, [videoKey]: url }));
+          setMediaCache((m) => ({ ...m, [videoKey!]: url }));
         } catch {
-          /* idb 실패 시 메타데이터만 저장 */
+          videoKey = undefined;
         }
       }
-      const gradient = GRADIENT_POOL[Math.floor(Math.random() * GRADIENT_POOL.length)];
-      const clip: Clip = {
-        id: `user-${uid()}`,
-        memberId: ME_ID,
-        gameId: input.gameId,
-        kind: input.kind,
-        caption: input.caption,
-        dateKey: todayKey(),
-        hour: d.getHours(),
-        minute: d.getMinutes(),
-        gradient,
-        emoji: input.emoji ?? "🎬",
-        videoKey,
-        reactions: [],
-      };
-      setPersisted((p) => ({ ...p, userClips: [...p.userClips, clip] }));
-    },
-    []
-  );
+    }
+    const gradient = GRADIENT_POOL[Math.floor(Math.random() * GRADIENT_POOL.length)];
+    const clip: Clip = {
+      id: `user-${uid()}`,
+      memberId: ME_ID,
+      gameId: input.gameId,
+      kind: input.kind,
+      caption: input.caption,
+      dateKey: todayKey(),
+      hour: d.getHours(),
+      minute: d.getMinutes(),
+      gradient,
+      emoji: input.emoji ?? "🎬",
+      videoKey,
+      reactions: [],
+    };
+    setPersisted((p) => ({ ...p, userClips: [...p.userClips, clip] }));
+  }, []);
 
   const toggleReaction = useCallback((clipId: string, emoji: string) => {
     setPersisted((p) => {
@@ -192,7 +353,6 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         clips[userIdx] = { ...clips[userIdx], reactions: apply(clips[userIdx].reactions) };
         return { ...p, userClips: clips };
       }
-      // 시드 클립 → override에 기록
       const current =
         p.reactionOverrides[clipId] ??
         seedClips(todayKey(), 23).find((c) => c.id === clipId)?.reactions ??
@@ -228,24 +388,39 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const setCheckIn = useCallback((c: Omit<CheckIn, "dateKey" | "time">) => {
     const d = new Date();
     const key = todayKey();
-    const checkIn: CheckIn = {
+    const base: CheckIn = {
       ...c,
       dateKey: key,
       time: `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`,
     };
-    setPersisted((p) => ({ ...p, checkIns: { ...p.checkIns, [key]: checkIn } }));
+    // 즉시 로컬 반영 후, 사진을 서버에 업로드해 remote 마커로 교체
+    setPersisted((p) => ({ ...p, checkIns: { ...p.checkIns, [key]: base } }));
+    (async () => {
+      const fields = ["selfie", "screen", "rear"] as const;
+      const updated: CheckIn = { ...base };
+      let changed = false;
+      for (const f of fields) {
+        const v = updated[f];
+        if (v?.startsWith("data:") && v.length < 900_000) {
+          const marker = await uploadMedia(v);
+          if (marker) {
+            setMediaCache((m) => ({ ...m, [marker]: v }));
+            updated[f] = marker;
+            changed = true;
+          }
+        }
+      }
+      if (changed) {
+        setPersisted((p) => ({ ...p, checkIns: { ...p.checkIns, [key]: updated } }));
+      }
+    })();
   }, []);
 
-  const requestJoin = useCallback(
-    (memberId: string) => {
-      setPersisted((p) =>
-        p.joinRequests.includes(memberId)
-          ? p
-          : { ...p, joinRequests: [...p.joinRequests, memberId] }
-      );
-    },
-    []
-  );
+  const requestJoin = useCallback((memberId: string) => {
+    setPersisted((p) =>
+      p.joinRequests.includes(memberId) ? p : { ...p, joinRequests: [...p.joinRequests, memberId] }
+    );
+  }, []);
 
   const setIntegration = useCallback((kind: keyof Integrations, id: string | undefined) => {
     setPersisted((p) => ({ ...p, integrations: { ...p.integrations, [kind]: id } }));
@@ -253,6 +428,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   const value = useMemo<StoreValue>(() => {
     const currentHour = now.getHours();
+    const resolveMedia = (v?: string) =>
+      v?.startsWith(REMOTE_PREFIX) ? mediaCache[v] : v;
+
     const seeds = seedClips(today, currentHour).map((c) => ({
       ...c,
       reactions: persisted.reactionOverrides[c.id] ?? c.reactions,
@@ -261,15 +439,23 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       .filter((c) => c.dateKey === today)
       .map((c) => ({
         ...c,
-        videoUrl: c.videoKey ? videoUrls[c.videoKey] : undefined,
+        videoUrl: c.videoKey ? mediaCache[c.videoKey] : undefined,
       }));
     const todayClips = [...seeds, ...userToday].sort(
       (a, b) => a.hour - b.hour || a.minute - b.minute
     );
-    const questDoneToday = [
-      ...seedQuestDone(today),
-      ...(persisted.questDone[today] ?? []),
-    ];
+    const questDoneToday = [...seedQuestDone(today), ...(persisted.questDone[today] ?? [])];
+
+    const rawCheckIn = persisted.checkIns[today];
+    const checkInToday = rawCheckIn
+      ? {
+          ...rawCheckIn,
+          selfie: resolveMedia(rawCheckIn.selfie),
+          screen: resolveMedia(rawCheckIn.screen),
+          rear: resolveMedia(rawCheckIn.rear),
+        }
+      : undefined;
+
     return {
       ready,
       today,
@@ -278,7 +464,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       diary: [...seedDiary(), ...persisted.userDiary],
       questDoneToday,
       streak: persisted.streak,
-      checkInToday: persisted.checkIns[today],
+      checkInToday,
       joinRequests: persisted.joinRequests,
       integrations: persisted.integrations,
       toasts,
@@ -296,7 +482,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     today,
     now,
     persisted,
-    videoUrls,
+    mediaCache,
     toasts,
     addClip,
     toggleReaction,
