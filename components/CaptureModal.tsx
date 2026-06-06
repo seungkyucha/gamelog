@@ -4,10 +4,11 @@ import { GAMES } from "@/lib/seed";
 import { useStore } from "@/lib/store";
 import type { ClipKind } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { Camera, CameraOff, X } from "lucide-react";
+import { Camera, CameraOff, SwitchCamera, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type Phase = "init" | "preview" | "recording" | "review" | "nocam";
+type Facing = "user" | "environment";
 
 const FALLBACK_EMOJIS = ["🎮", "🔥", "🏆", "💀", "😎", "🍗", "⚔️", "🌙"];
 
@@ -35,32 +36,56 @@ export function CaptureModal({
   const [gameId, setGameId] = useState(GAMES[0].id);
   const [emoji, setEmoji] = useState(FALLBACK_EMOJIS[0]);
   const [saving, setSaving] = useState(false);
+  const [facing, setFacing] = useState<Facing>("user");
+  const [hasMultiCam, setHasMultiCam] = useState(false);
+  /** 녹화된 영상이 전면 카메라인지 (리뷰 화면 미러링용) */
+  const [recFacing, setRecFacing] = useState<Facing>("user");
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const recorderRef = useRef<MediaRecorder | null>(null);
+  const cancelledRef = useRef(false);
+
+  const startStream = useCallback(async (face: Facing) => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: face },
+        audio: false,
+      });
+      if (cancelledRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      streamRef.current = stream;
+      setFacing(face);
+      setPhase("preview");
+      // 권한 허용 후 카메라 개수 확인 → 전환 버튼 노출 여부
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setHasMultiCam(devices.filter((d) => d.kind === "videoinput").length > 1);
+      } catch {
+        /* 무시 */
+      }
+    } catch {
+      if (!cancelledRef.current) setPhase("nocam");
+    }
+  }, []);
 
   // 카메라 시작
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        setPhase("preview");
-      } catch {
-        if (!cancelled) setPhase("nocam");
-      }
-    })();
+    cancelledRef.current = false;
+    startStream("user");
     return () => {
-      cancelled = true;
+      cancelledRef.current = true;
       streamRef.current?.getTracks().forEach((t) => t.stop());
     };
-  }, []);
+  }, [startStream]);
+
+  const flipCamera = useCallback(() => {
+    setPhase("init");
+    startStream(facing === "user" ? "environment" : "user");
+  }, [facing, startStream]);
 
   // 비디오 엘리먼트에 스트림 연결
   useEffect(() => {
@@ -94,6 +119,7 @@ export function CaptureModal({
       setPhase("review");
     };
     recorder.start();
+    setRecFacing(facing);
     setPhase("recording");
     setCountdown(duration);
     let left = duration;
@@ -143,10 +169,32 @@ export function CaptureModal({
               </div>
             )}
             {(phase === "preview" || phase === "recording") && (
-              <video ref={videoRef} className="h-full w-full -scale-x-100 object-cover" muted playsInline />
+              <video
+                ref={videoRef}
+                className={cn("h-full w-full object-cover", facing === "user" && "-scale-x-100")}
+                muted
+                playsInline
+              />
             )}
             {phase === "review" && blobUrl && (
-              <video src={blobUrl} className="h-full w-full -scale-x-100 object-cover" autoPlay loop muted playsInline />
+              <video
+                src={blobUrl}
+                className={cn("h-full w-full object-cover", recFacing === "user" && "-scale-x-100")}
+                autoPlay
+                loop
+                muted
+                playsInline
+              />
+            )}
+            {phase === "preview" && hasMultiCam && (
+              <button
+                onClick={flipCamera}
+                title={facing === "user" ? "후면 카메라로 전환" : "전면 카메라로 전환"}
+                className="absolute bottom-3 right-3 flex items-center gap-1.5 rounded-full bg-black/60 px-3 py-2 text-[13px] font-bold text-white transition-colors hover:bg-black/80"
+              >
+                <SwitchCamera size={16} />
+                {facing === "user" ? "후면" : "전면"}
+              </button>
             )}
             {phase === "nocam" && (
               <div
