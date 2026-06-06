@@ -9,7 +9,6 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { getVideoUrl, putVideo } from "./idb";
 import {
   GRADIENT_POOL,
   ME_ID,
@@ -101,6 +100,11 @@ function stripForSave(s: PersistedState): PersistedState {
   };
 }
 
+/** 서버에 저장되지 못한 로컬 전용 영상 클립 제거 — 모든 기기에서 동일하게 보이는 것만 유지 */
+function sanitizeClips(clips: Clip[]): Clip[] {
+  return clips.filter((c) => !c.videoKey || c.videoKey.startsWith(REMOTE_PREFIX));
+}
+
 /** 두 상태의 가산적 병합 — 어느 기기의 업로드도 사라지지 않게 합집합 기준 */
 function mergeStates(a: PersistedState, b: PersistedState): PersistedState {
   const clipIds = new Set(a.userClips.map((c) => c.id));
@@ -130,7 +134,7 @@ function mergeStates(a: PersistedState, b: PersistedState): PersistedState {
   }
 
   return {
-    userClips: [...a.userClips, ...b.userClips.filter((c) => !clipIds.has(c.id))],
+    userClips: sanitizeClips([...a.userClips, ...b.userClips.filter((c) => !clipIds.has(c.id))]),
     userDiary: [...a.userDiary, ...b.userDiary.filter((d) => !diaryIds.has(d.id))],
     reactionOverrides: { ...b.reactionOverrides, ...a.reactionOverrides },
     questDone,
@@ -211,18 +215,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
     (async () => {
       const local = loadPersisted();
+      local.userClips = sanitizeClips(local.userClips);
       const server = await fetchServerState();
       if (cancelled) return;
       const merged = server ? mergeStates(local, server) : local;
       setPersisted(merged);
       setReady(true);
-      // IndexedDB 로컬 영상 복원
-      for (const c of merged.userClips) {
-        if (c.videoKey && !c.videoKey.startsWith(REMOTE_PREFIX)) {
-          const u = await getVideoUrl(c.videoKey);
-          if (u && !cancelled) setMediaCache((m) => ({ ...m, [c.videoKey!]: u }));
-        }
-      }
     })();
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => {
@@ -292,7 +290,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const d = new Date();
     let videoKey: string | undefined;
     if (input.blob) {
-      // 1순위: 서버 업로드 (모든 기기에서 보임) · 2순위: IndexedDB (이 기기 전용)
+      // 서버 업로드 성공 시에만 영상 첨부 — 모든 기기에서 동일하게 보이도록.
+      // 실패하면 영상 없이(그라데이션+이모지) 기록되어 어디서나 같은 모습.
       try {
         const dataUrl = await blobToDataUrl(input.blob);
         if (dataUrl.length < 650_000) {
@@ -303,17 +302,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           }
         }
       } catch {
-        /* 변환 실패 → 로컬 폴백 */
-      }
-      if (!videoKey) {
-        videoKey = `video-${uid()}`;
-        try {
-          await putVideo(videoKey, input.blob);
-          const url = URL.createObjectURL(input.blob);
-          setMediaCache((m) => ({ ...m, [videoKey!]: url }));
-        } catch {
-          videoKey = undefined;
-        }
+        /* 업로드 실패 → 영상 없는 클립으로 기록 */
       }
     }
     const gradient = GRADIENT_POOL[Math.floor(Math.random() * GRADIENT_POOL.length)];
