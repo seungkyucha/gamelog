@@ -179,7 +179,7 @@ function MobileNav() {
   const pathname = usePathname();
   const items = CHANNELS.flatMap((g) => g.items).filter((i) => i.href !== "/wrapped");
   return (
-    <nav className="flex h-14 shrink-0 items-center justify-around border-t border-bg-tertiary bg-bg-secondary md:hidden">
+    <nav className="flex h-14 shrink-0 items-stretch justify-around border-t border-bg-tertiary bg-bg-secondary md:hidden">
       {items.map((ch) => {
         const Icon = ch.icon;
         const active = pathname === ch.href;
@@ -187,13 +187,30 @@ function MobileNav() {
           <Link
             key={ch.href}
             href={ch.href}
+            aria-current={active ? "page" : undefined}
             className={cn(
-              "flex flex-col items-center gap-0.5 px-2 py-1 text-txt-muted",
-              active && "text-brand"
+              "relative flex flex-1 flex-col items-center justify-center gap-0.5 transition-colors duration-100",
+              active ? "text-brand" : "text-txt-muted hover:text-txt-normal"
             )}
           >
-            <Icon size={20} />
-            <span className="text-[10px] font-medium">{MOBILE_LABELS[ch.href] ?? ch.name}</span>
+            {/* 활성 인디케이터 바 (Discord 서버 레일의 흰색 pill 변형) */}
+            <span
+              className={cn(
+                "absolute top-0 h-0.5 rounded-b-full bg-brand transition-all duration-200",
+                active ? "w-8 opacity-100" : "w-0 opacity-0"
+              )}
+            />
+            <span
+              className={cn(
+                "flex h-7 w-12 items-center justify-center rounded-full transition-colors duration-200",
+                active && "bg-brand/15"
+              )}
+            >
+              <Icon size={20} />
+            </span>
+            <span className={cn("text-[10px]", active ? "font-bold" : "font-medium")}>
+              {MOBILE_LABELS[ch.href] ?? ch.name}
+            </span>
           </Link>
         );
       })}
