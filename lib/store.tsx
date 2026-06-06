@@ -20,7 +20,7 @@ import {
   todayKey,
   todaysQuest,
 } from "./seed";
-import type { CheckIn, Clip, ClipKind, DiaryEntry, PersistedState, Reaction } from "./types";
+import type { CheckIn, Clip, ClipKind, DiaryEntry, Integrations, PersistedState, Reaction } from "./types";
 import { uid } from "./utils";
 
 const LS_KEY = "gamelog-state-v1";
@@ -51,6 +51,7 @@ interface StoreValue {
   streak: { count: number; lastDate: string };
   checkInToday?: CheckIn;
   joinRequests: string[];
+  integrations: Integrations;
   toasts: Toast[];
   addClip: (input: AddClipInput) => Promise<void>;
   toggleReaction: (clipId: string, emoji: string) => void;
@@ -58,6 +59,7 @@ interface StoreValue {
   completeQuest: () => void;
   setCheckIn: (c: Omit<CheckIn, "dateKey" | "time">) => void;
   requestJoin: (memberId: string) => void;
+  setIntegration: (kind: keyof Integrations, id: string | undefined) => void;
   pushToast: (message: string, emoji?: string) => void;
 }
 
@@ -71,6 +73,7 @@ const DEFAULT_PERSISTED: PersistedState = {
   userDiary: [],
   checkIns: {},
   joinRequests: [],
+  integrations: {},
 };
 
 function loadPersisted(): PersistedState {
@@ -244,6 +247,10 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     []
   );
 
+  const setIntegration = useCallback((kind: keyof Integrations, id: string | undefined) => {
+    setPersisted((p) => ({ ...p, integrations: { ...p.integrations, [kind]: id } }));
+  }, []);
+
   const value = useMemo<StoreValue>(() => {
     const currentHour = now.getHours();
     const seeds = seedClips(today, currentHour).map((c) => ({
@@ -273,6 +280,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       streak: persisted.streak,
       checkInToday: persisted.checkIns[today],
       joinRequests: persisted.joinRequests,
+      integrations: persisted.integrations,
       toasts,
       addClip,
       toggleReaction,
@@ -280,6 +288,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       completeQuest,
       setCheckIn,
       requestJoin,
+      setIntegration,
       pushToast,
     };
   }, [
@@ -295,6 +304,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     completeQuest,
     setCheckIn,
     requestJoin,
+    setIntegration,
     pushToast,
   ]);
 

@@ -5,15 +5,22 @@ import { ChannelHeader } from "@/components/ChannelHeader";
 import { GAMES, ME_ID, MEMBERS } from "@/lib/seed";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { Camera, Eye, Gamepad2, MonitorUp, X } from "lucide-react";
+import { Camera, Eye, Gamepad2, MonitorUp, SwitchCamera, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-function grabFrame(video: HTMLVideoElement, maxW = 640): string {
+type Facing = "user" | "environment";
+
+function grabFrame(video: HTMLVideoElement, maxW = 640, mirror = false): string {
   const canvas = document.createElement("canvas");
   const scale = Math.min(1, maxW / (video.videoWidth || maxW));
   canvas.width = (video.videoWidth || maxW) * scale;
   canvas.height = (video.videoHeight || maxW * 0.75) * scale;
   const ctx = canvas.getContext("2d")!;
+  if (mirror) {
+    // 전면 카메라는 미러링을 이미지에 구워서 저장 (표시할 땐 반전 불필요)
+    ctx.translate(canvas.width, 0);
+    ctx.scale(-1, 1);
+  }
   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
   return canvas.toDataURL("image/jpeg", 0.6);
 }
@@ -23,40 +30,63 @@ function CheckInModal({ onClose }: { onClose: () => void }) {
   const { setCheckIn, pushToast } = useStore();
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const cancelledRef = useRef(false);
   const [camReady, setCamReady] = useState(false);
+  const [facing, setFacing] = useState<Facing>("user");
+  const [hasMultiCam, setHasMultiCam] = useState(false);
   const [selfie, setSelfie] = useState<string | undefined>();
   const [screen, setScreen] = useState<string | undefined>();
   const [caption, setCaption] = useState("");
   const [gameId, setGameId] = useState(GAMES[0].id);
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
-        if (cancelled) {
-          stream.getTracks().forEach((t) => t.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          videoRef.current.play().catch(() => {});
-        }
-        setCamReady(true);
-      } catch {
-        setCamReady(false);
+  const startStream = useCallback(async (face: Facing) => {
+    streamRef.current?.getTracks().forEach((t) => t.stop());
+    setCamReady(false);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: face },
+        audio: false,
+      });
+      if (cancelledRef.current) {
+        stream.getTracks().forEach((t) => t.stop());
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
-    };
+      streamRef.current = stream;
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.play().catch(() => {});
+      }
+      setFacing(face);
+      setCamReady(true);
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        setHasMultiCam(devices.filter((d) => d.kind === "videoinput").length > 1);
+      } catch {
+        /* 무시 */
+      }
+    } catch {
+      if (!cancelledRef.current) setCamReady(false);
+    }
   }, []);
 
+  useEffect(() => {
+    cancelledRef.current = false;
+    startStream("user");
+    return () => {
+      cancelledRef.current = true;
+      streamRef.current?.getTracks().forEach((t) => t.stop());
+    };
+  }, [startStream]);
+
+  const flipCamera = useCallback(() => {
+    setSelfie(undefined); // 전환하면 다시 찍기
+    startStream(facing === "user" ? "environment" : "user");
+  }, [facing, startStream]);
+
   const captureSelfie = useCallback(() => {
-    if (videoRef.current && camReady) setSelfie(grabFrame(videoRef.current));
-  }, [camReady]);
+    if (videoRef.current && camReady)
+      setSelfie(grabFrame(videoRef.current, 640, facing === "user"));
+  }, [camReady, facing]);
 
   const captureScreen = useCallback(async () => {
     try {
@@ -105,17 +135,31 @@ function CheckInModal({ onClose }: { onClose: () => void }) {
             <div className="absolute left-3 top-3 h-28 w-20 overflow-hidden rounded-lg border-2 border-bg-tertiary bg-bg-floating shadow-elev-high">
               {selfie ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={selfie} alt="셀카" className="h-full w-full -scale-x-100 object-cover" />
+                <img src={selfie} alt="셀카" className="h-full w-full object-cover" />
               ) : (
-                <video ref={videoRef} className="h-full w-full -scale-x-100 object-cover" muted playsInline />
+                <video
+                  ref={videoRef}
+                  className={cn("h-full w-full object-cover", facing === "user" && "-scale-x-100")}
+                  muted
+                  playsInline
+                />
               )}
             </div>
           </div>
 
           <div className="flex gap-2">
             <button className="btn btn-sm flex-1" onClick={captureSelfie} disabled={!camReady || !!selfie}>
-              <Camera size={14} /> {selfie ? "셀카 완료 ✓" : camReady ? "셀카 찰칵" : "카메라 없음"}
+              <Camera size={14} /> {selfie ? "셀카 완료 ✓" : camReady ? "찰칵" : "카메라 없음"}
             </button>
+            {hasMultiCam && (
+              <button
+                className="btn btn-sm btn-ghost shrink-0"
+                onClick={flipCamera}
+                title={facing === "user" ? "후면 카메라로 전환" : "전면 카메라로 전환"}
+              >
+                <SwitchCamera size={14} /> {facing === "user" ? "후면" : "전면"}
+              </button>
+            )}
             <button className="btn btn-sm btn-ghost flex-1" onClick={captureScreen}>
               <MonitorUp size={14} /> {screen ? "화면 다시 캡처" : "게임 화면 캡처"}
             </button>
@@ -188,7 +232,7 @@ export default function NowPage() {
                 {checkInToday.selfie && (
                   <div className="absolute left-3 top-3 h-28 w-20 overflow-hidden rounded-lg border-2 border-bg-secondary shadow-elev-high">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={checkInToday.selfie} alt="셀카" className="h-full w-full -scale-x-100 object-cover" />
+                    <img src={checkInToday.selfie} alt="셀카" className="h-full w-full object-cover" />
                   </div>
                 )}
                 <span className="absolute right-2 top-2 rounded-full bg-status-online px-2 py-0.5 text-xxs font-bold text-white">

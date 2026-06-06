@@ -80,7 +80,7 @@ export function shiftKey(days: number): string {
   return dateKey(d);
 }
 
-function hashStr(s: string): number {
+export function hashStr(s: string): number {
   let h = 2166136261;
   for (let i = 0; i < s.length; i++) {
     h ^= s.charCodeAt(i);
@@ -89,7 +89,7 @@ function hashStr(s: string): number {
   return h >>> 0;
 }
 
-function mulberry32(seed: number) {
+export function mulberry32(seed: number) {
   let a = seed;
   return () => {
     a |= 0;

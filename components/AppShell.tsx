@@ -5,6 +5,7 @@ import { GAMES, MEMBERS, OTHER_PARTIES, PARTY } from "@/lib/seed";
 import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
+  Activity,
   BookOpen,
   Eye,
   Gamepad2,
@@ -24,6 +25,7 @@ import { Avatar } from "./Avatar";
 
 const CHANNELS = [
   { group: "오늘", items: [
+    { href: "/feed", name: "게임-피드", icon: Activity },
     { href: "/vlog", name: "오늘의-브이로그", icon: Video },
     { href: "/moments", name: "순간-포착", icon: Zap },
     { href: "/now", name: "지금-뭐해", icon: Eye },
@@ -167,6 +169,15 @@ function MemberList() {
   );
 }
 
+const MOBILE_LABELS: Record<string, string> = {
+  "/feed": "피드",
+  "/vlog": "브이로그",
+  "/moments": "순간",
+  "/now": "지금",
+  "/quests": "퀘스트",
+  "/diary": "다이어리",
+};
+
 function MobileNav() {
   const pathname = usePathname();
   const items = CHANNELS.flatMap((g) => g.items).filter((i) => i.href !== "/wrapped");
@@ -180,12 +191,12 @@ function MobileNav() {
             key={ch.href}
             href={ch.href}
             className={cn(
-              "flex flex-col items-center gap-0.5 px-3 py-1 text-txt-muted",
+              "flex flex-col items-center gap-0.5 px-2 py-1 text-txt-muted",
               active && "text-brand"
             )}
           >
             <Icon size={20} />
-            <span className="text-[10px] font-medium">{ch.name.split("-")[0]}</span>
+            <span className="text-[10px] font-medium">{MOBILE_LABELS[ch.href] ?? ch.name}</span>
           </Link>
         );
       })}

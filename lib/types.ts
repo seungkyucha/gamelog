@@ -72,6 +72,12 @@ export interface CheckIn {
   screen?: string;
 }
 
+/** 외부 계정 연동 상태 (Steam / Riot·OP.GG) */
+export interface Integrations {
+  steam?: string; // Steam ID 또는 프로필명
+  riot?: string; // 소환사명#태그
+}
+
 /** localStorage에 영속되는 사용자 상태 */
 export interface PersistedState {
   userClips: Clip[];
@@ -81,4 +87,5 @@ export interface PersistedState {
   userDiary: DiaryEntry[];
   checkIns: Record<string, CheckIn>; // dateKey -> 내 체크인
   joinRequests: string[]; // 오늘 합류 요청 보낸 memberId
+  integrations: Integrations;
 }
