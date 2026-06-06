@@ -37,11 +37,11 @@ type FeedItem =
   | { kind: "event"; time: number; e: FeedEvent }
   | { kind: "clip"; time: number; c: Clip };
 
-const CLIP_LABEL: Record<Clip["kind"], { label: string; href: string }> = {
-  vlog: { label: "브이로그", href: "/vlog" },
-  moment: { label: "POTG", href: "/moments" },
-  quest: { label: "퀘스트 인증", href: "/quests" },
-  now: { label: "체크인", href: "/now" },
+const CLIP_LABEL: Record<Clip["kind"], { label: string; href: string; color: string }> = {
+  vlog: { label: "브이로그", href: "/vlog", color: "#5865F2" },
+  moment: { label: "POTG", href: "/moments", color: "#EB459E" },
+  quest: { label: "퀘스트 인증", href: "/quests", color: "#F0B232" },
+  now: { label: "체크인", href: "/now", color: "#00A8FC" },
 };
 
 function SourceBadge({ source }: { source: "steam" | "opgg" }) {
@@ -127,237 +127,6 @@ function ConnectCard({
   );
 }
 
-/** 통일된 피드 카드 셸: 좌측 게임 타이틀 이미지 + 타입 컬러 액센트 바 + 헤드라인/서브라인 */
-function FeedShell({
-  accent,
-  gameId,
-  member,
-  source,
-  hour,
-  minute,
-  headline,
-  sub,
-  right,
-}: {
-  accent: string;
-  gameId: string;
-  member: (typeof MEMBERS)[number];
-  source?: "steam" | "opgg";
-  hour: number;
-  minute: number;
-  headline: ReactNode;
-  sub: ReactNode;
-  right?: ReactNode;
-}) {
-  const isMe = member.id === ME_ID;
-  return (
-    <div className="relative overflow-hidden rounded-lg bg-bg-secondary transition-colors hover:bg-[#34363C]">
-      <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accent }} />
-      <div className="flex items-center gap-3 p-3 pl-4">
-        {/* 게임 정사각형 타이틀 이미지 */}
-        <GameCover gameId={gameId} size={52} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <Avatar member={member} size={16} />
-            <span className="text-[12px] font-semibold text-txt-muted">{isMe ? "나" : member.name}</span>
-            {source && <SourceBadge source={source} />}
-            <span className="ml-auto shrink-0 text-xxs text-txt-faint">{fmtTime(hour, minute)}</span>
-          </div>
-          <p className="mt-1 truncate text-[15px] font-bold leading-tight text-txt-header">{headline}</p>
-          <p className="mt-0.5 truncate text-[13px] text-txt-muted">{sub}</p>
-        </div>
-        {right && <div className="shrink-0">{right}</div>}
-      </div>
-    </div>
-  );
-}
-
-/** 게임명 강조 칩 (서브라인용) */
-function GameTag({ gameId }: { gameId: string }) {
-  const game = GAMES.find((g) => g.id === gameId)!;
-  return (
-    <span className="font-semibold" style={{ color: game.color }}>
-      {game.emoji} {game.name}
-    </span>
-  );
-}
-
-const TYPE_STYLE: Record<FeedType, { accent: string }> = {
-  start: { accent: "#23A55A" },
-  end: { accent: "#80848E" },
-  match: { accent: "#23A55A" }, // 승패에 따라 동적 변경
-  mvp: { accent: "#F0B232" },
-  achievement: { accent: "#FEE75C" },
-  rank: { accent: "#5865F2" },
-  milestone: { accent: "#00A8FC" },
-  library: { accent: "#57F287" },
-  streak: { accent: "#ED4245" },
-  duo: { accent: "#EB459E" },
-};
-
-function EventCard({ e }: { e: FeedEvent }) {
-  const { requestJoin, joinRequests, pushToast } = useStore();
-  const member = MEMBERS.find((m) => m.id === e.memberId)!;
-  const game = GAMES.find((g) => g.id === e.gameId)!;
-  const isMe = e.memberId === ME_ID;
-  const requested = joinRequests.includes(e.memberId);
-
-  const base = { member, source: e.source, hour: e.hour, minute: e.minute, gameId: e.gameId };
-  const style = TYPE_STYLE[e.type];
-
-  switch (e.type) {
-    case "start":
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={<>{game.name} 시작</>}
-          sub={<><GameTag gameId={e.gameId} /> · 지금 플레이 중이야</>}
-          right={
-            !isMe && (
-              <button
-                className={cn("btn btn-sm", requested && "btn-ghost")}
-                disabled={requested}
-                onClick={() => {
-                  requestJoin(e.memberId);
-                  pushToast(`${member.name}에게 합류 요청을 보냈어!`, "🎮");
-                }}
-              >
-                {requested ? "요청 ✓" : "합류"}
-              </button>
-            )
-          }
-        />
-      );
-
-    case "end":
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={<>{game.name} 종료</>}
-          sub={<><GameTag gameId={e.gameId} /> · {fmtMinutes(e.end?.minutes ?? 0)} 플레이</>}
-        />
-      );
-
-    case "match": {
-      const m = e.match!;
-      const chicken = e.gameId === "pubg" && m.win;
-      const accent = chicken ? "#FEE75C" : m.win ? "#23A55A" : "#F23F43";
-      return (
-        <FeedShell
-          {...base}
-          accent={accent}
-          headline={
-            chicken ? (
-              <span className="text-accent-yellow">🍗 치킨 디너!</span>
-            ) : (
-              <>
-                <span className={m.win ? "text-accent-green" : "text-accent-red"}>{m.win ? "승리" : "패배"}</span>
-                {" — "}
-                {game.name}
-              </>
-            )
-          }
-          sub={<>{m.champion} · KDA {m.kda} · {e.gameId === "pubg" ? `등수 ${m.score}` : `스코어 ${m.score}`}</>}
-          right={
-            m.lp !== undefined && (
-              <span className={cn("text-[15px] font-black", m.lp > 0 ? "text-accent-green" : "text-accent-red")}>
-                {m.lp > 0 ? `+${m.lp}` : m.lp} LP
-              </span>
-            )
-          }
-        />
-      );
-    }
-
-    case "mvp":
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={<>매치 MVP 선정 👑</>}
-          sub={<><GameTag gameId={e.gameId} /> · {e.mvp?.champion} · KDA {e.mvp?.kda}</>}
-        />
-      );
-
-    case "achievement":
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={<>업적 &ldquo;{e.achievement?.name}&rdquo;</>}
-          sub={<><GameTag gameId={e.gameId} /> · 상위 {e.achievement?.rarity}%만 달성한 업적 ✨</>}
-        />
-      );
-
-    case "rank":
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={
-            <>
-              {e.rank?.from} → <span className="text-txt-link">{e.rank?.to}</span> 승급!
-            </>
-          }
-          sub={<><GameTag gameId={e.gameId} /> · 축하 리액션을 남겨줘 🎉</>}
-        />
-      );
-
-    case "milestone":
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={<>누적 {e.milestone?.hours}시간 달성 ⏳</>}
-          sub={<><GameTag gameId={e.gameId} /> · 이 정도면 인생 게임 인정</>}
-        />
-      );
-
-    case "library":
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={<>새 게임 추가 — {game.name}</>}
-          sub={<><GameTag gameId={e.gameId} /> · 같이 할 사람? 🙌</>}
-        />
-      );
-
-    case "streak": {
-      const s = e.streak!;
-      return (
-        <FeedShell
-          {...base}
-          accent={s.win ? "#ED4245" : "#80848E"}
-          headline={s.win ? <>{s.count}연승 중! 🔥</> : <>{s.count}연패... 🫠</>}
-          sub={<><GameTag gameId={e.gameId} /> · {s.win ? "기세를 몰아가는 중" : "콕 찔러서 한 판 같이 해줘"}</>}
-        />
-      );
-    }
-
-    case "duo": {
-      const partner = MEMBERS.find((m) => m.id === e.duo?.withMemberId);
-      return (
-        <FeedShell
-          {...base}
-          accent={style.accent}
-          headline={
-            <>
-              {member.name} & {partner?.name ?? "파티원"} 듀오 —{" "}
-              <span className={e.duo?.win ? "text-accent-green" : "text-accent-red"}>
-                {e.duo?.win ? "승리" : "패배"}
-              </span>
-            </>
-          }
-          sub={<><GameTag gameId={e.gameId} /> · 듀오 케미 {e.duo?.win ? "증명 완료 🤝" : "다음 판엔 이긴다"}</>}
-        />
-      );
-    }
-  }
-}
-
 /** 계정 연동 팝업 */
 function ConnectModal({ onClose }: { onClose: () => void }) {
   const { integrations } = useStore();
@@ -398,55 +167,335 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-const CLIP_STYLE: Record<Clip["kind"], { accent: string }> = {
-  vlog: { accent: "#5865F2" },
-  moment: { accent: "#EB459E" },
-  quest: { accent: "#F0B232" },
-  now: { accent: "#00A8FC" },
-};
+// ---- 트위터 스타일 피드 카드 ----
 
-/** 파티원 클립(브이로그/POTG)을 피드 카드로 노출 */
-function ClipFeedCard({ c }: { c: Clip }) {
-  const member = MEMBERS.find((m) => m.id === c.memberId)!;
-  const meta = CLIP_LABEL[c.kind];
-  const style = CLIP_STYLE[c.kind];
-  const isMe = c.memberId === ME_ID;
-
+/** 트윗 셸: 좌측 아바타 + 이름·시간 헤더 + 본문 + 첨부 */
+function Tweet({
+  member,
+  source,
+  badge,
+  badgeColor,
+  hour,
+  minute,
+  text,
+  attachment,
+}: {
+  member: (typeof MEMBERS)[number];
+  source?: "steam" | "opgg";
+  badge?: string;
+  badgeColor?: string;
+  hour: number;
+  minute: number;
+  text: ReactNode;
+  attachment?: ReactNode;
+}) {
+  const isMe = member.id === ME_ID;
   return (
-    <Link
-      href={meta.href}
-      className="relative block overflow-hidden rounded-lg bg-bg-secondary transition-colors hover:bg-[#34363C]"
-    >
-      <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: style.accent }} />
-      <div className="flex items-center gap-3 p-3 pl-4">
-        {/* 게임 정사각형 타이틀 이미지 */}
-        <GameCover gameId={c.gameId} size={52} />
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-1.5">
-            <Avatar member={member} size={16} />
-            <span className="text-[12px] font-semibold text-txt-muted">{isMe ? "나" : member.name}</span>
+    <article className="flex gap-3 p-4 transition-colors hover:bg-[#34363C]/60">
+      <Avatar member={member} size={42} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <span className="text-[15px] font-bold text-txt-header">{isMe ? "나" : member.name}</span>
+          <span className="text-[13px] text-txt-faint">@{member.id}</span>
+          {source && <SourceBadge source={source} />}
+          {badge && (
             <span
               className="rounded px-1.5 py-0.5 text-[10px] font-bold"
-              style={{ background: `${style.accent}33`, color: style.accent }}
+              style={{ background: `${badgeColor}33`, color: badgeColor }}
             >
-              {meta.label}
+              {badge}
             </span>
-            <span className="ml-auto shrink-0 text-xxs text-txt-faint">{fmtTime(c.hour, c.minute)}</span>
-          </div>
-          <p className="mt-0.5 truncate text-[15px] font-bold leading-tight text-txt-header">{c.caption}</p>
-          <p className="truncate text-[13px] text-txt-muted">
-            <GameTag gameId={c.gameId} /> · 탭해서 보기
-          </p>
+          )}
+          <span className="text-[13px] text-txt-faint">· {fmtTime(hour, minute)}</span>
         </div>
-        <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg ring-1 ring-bg-modifier">
-          <ClipMedia clip={c} />
-        </div>
+        <div className="mt-1 text-[15px] leading-relaxed text-txt-normal">{text}</div>
+        {attachment && <div className="mt-3">{attachment}</div>}
       </div>
-    </Link>
+    </article>
   );
 }
 
-/** Steam / OP.GG 연동 게임 활동 피드 + 파티 클립 통합 스트림 */
+/** 첨부: 게임 인용 카드 (트위터 링크 카드 느낌) */
+function GameAttachment({
+  gameId,
+  sub,
+  right,
+}: {
+  gameId: string;
+  sub?: ReactNode;
+  right?: ReactNode;
+}) {
+  const game = GAMES.find((g) => g.id === gameId)!;
+  return (
+    <div className="flex items-center gap-3 rounded-2xl border border-bg-modifier bg-bg-tertiary/40 p-3">
+      <GameCover gameId={gameId} size={56} />
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-[15px] font-bold text-txt-header">
+          {game.emoji} {game.name}
+        </p>
+        {sub && <p className="truncate text-[13px] text-txt-muted">{sub}</p>}
+      </div>
+      {right && <div className="shrink-0">{right}</div>}
+    </div>
+  );
+}
+
+/** 첨부: 전적 카드 */
+function MatchAttachment({ e }: { e: FeedEvent }) {
+  const m = e.match!;
+  const game = GAMES.find((g) => g.id === e.gameId)!;
+  const chicken = e.gameId === "pubg" && m.win;
+  return (
+    <div
+      className={cn(
+        "flex items-center gap-4 rounded-2xl border p-4",
+        chicken
+          ? "border-accent-yellow/40 bg-gradient-to-r from-accent-yellow/15 to-bg-tertiary/40"
+          : m.win
+            ? "border-status-online/30 bg-gradient-to-r from-status-online/10 to-bg-tertiary/40"
+            : "border-status-danger/30 bg-gradient-to-r from-status-danger/10 to-bg-tertiary/40"
+      )}
+    >
+      <GameCover gameId={e.gameId} size={56} />
+      <div className="min-w-0 flex-1">
+        <p className="text-[17px] font-black text-txt-header">
+          {chicken ? (
+            <span className="text-accent-yellow">🍗 치킨 디너!</span>
+          ) : (
+            <span className={m.win ? "text-accent-green" : "text-accent-red"}>
+              {m.win ? "승리" : "패배"}
+            </span>
+          )}
+          <span className="ml-2 text-[14px] font-semibold text-txt-muted">{game.name}</span>
+        </p>
+        <p className="text-[14px] text-txt-normal">
+          {m.champion} · <span className="font-bold">KDA {m.kda}</span> ·{" "}
+          {e.gameId === "pubg" ? `등수 ${m.score}` : `스코어 ${m.score}`}
+        </p>
+      </div>
+      {m.lp !== undefined && (
+        <span className={cn("text-xl font-black", m.lp > 0 ? "text-accent-green" : "text-accent-red")}>
+          {m.lp > 0 ? `+${m.lp}` : m.lp}
+          <span className="ml-0.5 text-[12px]">LP</span>
+        </span>
+      )}
+    </div>
+  );
+}
+
+function EventCard({ e }: { e: FeedEvent }) {
+  const { requestJoin, joinRequests, pushToast } = useStore();
+  const member = MEMBERS.find((m) => m.id === e.memberId)!;
+  const game = GAMES.find((g) => g.id === e.gameId)!;
+  const isMe = e.memberId === ME_ID;
+  const requested = joinRequests.includes(e.memberId);
+
+  const base = { member, source: e.source, hour: e.hour, minute: e.minute };
+
+  switch (e.type) {
+    case "start":
+      return (
+        <Tweet
+          {...base}
+          text={<>지금 <b>{game.name}</b> 켰다 🎮 같이 할 사람?</>}
+          attachment={
+            <GameAttachment
+              gameId={e.gameId}
+              sub="지금 플레이 중"
+              right={
+                !isMe && (
+                  <button
+                    className={cn("btn btn-sm", requested && "btn-ghost")}
+                    disabled={requested}
+                    onClick={() => {
+                      requestJoin(e.memberId);
+                      pushToast(`${member.name}에게 합류 요청을 보냈어!`, "🎮");
+                    }}
+                  >
+                    {requested ? "요청 ✓" : "나도 합류"}
+                  </button>
+                )
+              }
+            />
+          }
+        />
+      );
+
+    case "end":
+      return (
+        <Tweet
+          {...base}
+          text={
+            <>
+              <b>{game.name}</b> 오늘은 여기까지 👋{" "}
+              <span className="text-txt-muted">({fmtMinutes(e.end?.minutes ?? 0)} 플레이)</span>
+            </>
+          }
+        />
+      );
+
+    case "match":
+      return (
+        <Tweet
+          {...base}
+          text={
+            e.gameId === "pubg" && e.match?.win ? (
+              <>이걸 먹네?? 오늘 저녁은 치킨이다 🍗</>
+            ) : e.match?.win ? (
+              <>한 판 이기고 시작 😎</>
+            ) : (
+              <>아 이건 팀운이 없었다... 🫠</>
+            )
+          }
+          attachment={<MatchAttachment e={e} />}
+        />
+      );
+
+    case "mvp":
+      return (
+        <Tweet
+          {...base}
+          text={<>이번 판 MVP는 나야 👑</>}
+          attachment={
+            <GameAttachment
+              gameId={e.gameId}
+              sub={
+                <>
+                  매치 MVP · {e.mvp?.champion} · <b>KDA {e.mvp?.kda}</b>
+                </>
+              }
+            />
+          }
+        />
+      );
+
+    case "achievement":
+      return (
+        <Tweet
+          {...base}
+          text={
+            <>
+              업적 <b className="text-accent-yellow">&ldquo;{e.achievement?.name}&rdquo;</b> 달성! 🏅
+            </>
+          }
+          attachment={
+            <GameAttachment
+              gameId={e.gameId}
+              sub={<>전체 플레이어의 {e.achievement?.rarity}%만 가진 업적 ✨</>}
+            />
+          }
+        />
+      );
+
+    case "rank":
+      return (
+        <Tweet
+          {...base}
+          text={
+            <>
+              드디어 승급!! {e.rank?.from} → <b className="text-txt-link">{e.rank?.to}</b> 📈 축하해줘
+            </>
+          }
+          attachment={<GameAttachment gameId={e.gameId} sub="랭크 게임" />}
+        />
+      );
+
+    case "milestone":
+      return (
+        <Tweet
+          {...base}
+          text={
+            <>
+              누적 플레이 <b className="text-txt-link">{e.milestone?.hours}시간</b> 달성 ⏳ 이 정도면 인생 게임 인정?
+            </>
+          }
+          attachment={<GameAttachment gameId={e.gameId} />}
+        />
+      );
+
+    case "library":
+      return (
+        <Tweet
+          {...base}
+          text={<>새 게임 샀다! 라이브러리에 <b>{game.name}</b> 추가 🙌 같이 할 사람 구함</>}
+          attachment={<GameAttachment gameId={e.gameId} sub="라이브러리에 새로 추가됨" />}
+        />
+      );
+
+    case "streak": {
+      const s = e.streak!;
+      return (
+        <Tweet
+          {...base}
+          text={
+            s.win ? (
+              <>지금 <b className="text-accent-red">{s.count}연승</b> 중 🔥 기세 미쳤다</>
+            ) : (
+              <><b>{s.count}연패</b> 중... 누가 와서 분위기 좀 바꿔줘 🫠</>
+            )
+          }
+          attachment={<GameAttachment gameId={e.gameId} sub={s.win ? "연승 행진 중" : "위로가 필요해"} />}
+        />
+      );
+    }
+
+    case "duo": {
+      const partner = MEMBERS.find((m) => m.id === e.duo?.withMemberId);
+      return (
+        <Tweet
+          {...base}
+          text={
+            <>
+              <b>{partner?.name ?? "파티원"}</b>랑 듀오 돌렸다 —{" "}
+              <b className={e.duo?.win ? "text-accent-green" : "text-accent-red"}>
+                {e.duo?.win ? "승리" : "패배"}
+              </b>{" "}
+              {e.duo?.win ? "케미 증명 완료 🤝" : "다음 판엔 이긴다"}
+            </>
+          }
+          attachment={<GameAttachment gameId={e.gameId} sub="듀오 매치" />}
+        />
+      );
+    }
+  }
+}
+
+/** 파티원 클립(브이로그/POTG) — 트윗 + 큰 미디어 */
+function ClipFeedCard({ c }: { c: Clip }) {
+  const member = MEMBERS.find((m) => m.id === c.memberId)!;
+  const game = GAMES.find((g) => g.id === c.gameId)!;
+  const meta = CLIP_LABEL[c.kind];
+
+  return (
+    <Tweet
+      member={member}
+      badge={meta.label}
+      badgeColor={meta.color}
+      hour={c.hour}
+      minute={c.minute}
+      text={
+        <>
+          {c.caption}{" "}
+          <span className="text-[13px] font-semibold" style={{ color: game.color }}>
+            {game.emoji} {game.short}
+          </span>
+        </>
+      }
+      attachment={
+        <Link href={meta.href} className="block">
+          <div className="relative aspect-video w-full overflow-hidden rounded-2xl border border-bg-modifier">
+            <ClipMedia clip={c} />
+            <span className="absolute bottom-2 right-2 rounded-full bg-black/60 px-2.5 py-1 text-xxs font-bold text-white">
+              {meta.label} 보러 가기 ▶
+            </span>
+          </div>
+        </Link>
+      }
+    />
+  );
+}
+
+/** Steam / OP.GG 연동 게임 활동 피드 + 파티 클립 통합 스트림 (트위터 스타일) */
 export default function FeedPage() {
   const { now, today, integrations, todayClips } = useStore();
   const [filter, setFilter] = useState<Filter>("all");
@@ -490,7 +539,7 @@ export default function FeedPage() {
         }
       />
       <div className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-[740px] space-y-4 p-4 pb-10">
+        <div className="mx-auto max-w-[640px] space-y-3 p-4 pb-10">
           {/* 필터 */}
           <div className="flex flex-wrap gap-1.5">
             {FILTERS.map((f) => (
@@ -507,7 +556,7 @@ export default function FeedPage() {
             ))}
           </div>
 
-          {/* 피드 (최신순) */}
+          {/* 피드 (최신순, 트위터 스타일 타임라인) */}
           {filtered.length === 0 ? (
             <div className="card py-10 text-center">
               <p className="text-3xl">📡</p>
@@ -515,7 +564,7 @@ export default function FeedPage() {
               <p className="text-[13px] text-txt-muted">친구들이 게임을 시작하면 여기에 실시간으로 떠</p>
             </div>
           ) : (
-            <div className="space-y-2">
+            <div className="divide-y divide-bg-modifier/50 overflow-hidden rounded-xl bg-bg-secondary">
               {filtered.map((item) =>
                 item.kind === "event" ? (
                   <EventCard key={item.e.id} e={item.e} />
