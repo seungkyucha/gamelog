@@ -179,7 +179,7 @@ function MobileNav() {
   const pathname = usePathname();
   const items = CHANNELS.flatMap((g) => g.items).filter((i) => i.href !== "/wrapped");
   return (
-    <nav className="flex h-14 shrink-0 items-stretch justify-around border-t border-bg-tertiary bg-bg-secondary md:hidden">
+    <nav className="flex h-14 shrink-0 items-stretch justify-around border-t border-bg-tertiary bg-bg-secondary">
       {items.map((ch) => {
         const Icon = ch.icon;
         const active = pathname === ch.href;
@@ -221,7 +221,7 @@ function MobileNav() {
 function Toasts() {
   const { toasts } = useStore();
   return (
-    <div className="pointer-events-none fixed bottom-20 right-4 z-[100] flex flex-col gap-2 md:bottom-6">
+    <div className="pointer-events-none fixed bottom-20 right-4 z-[100] flex flex-col gap-2">
       {toasts.map((t) => (
         <div
           key={t.id}
@@ -248,18 +248,19 @@ function LoadingScreen() {
   );
 }
 
+// 데스크톱에서도 모바일 레이아웃으로 통일 — Discord식 4컬럼 셸(ServerRail/ChannelSidebar/MemberList)은
+// 비활성화 상태로 유지 (필요 시 아래 main 좌우에 다시 배치하면 복원됨)
+void ServerRail;
+void ChannelSidebar;
+void MemberList;
+
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const { ready } = useStore();
   if (!ready) return <LoadingScreen />;
   return (
     <div className="flex h-dvh flex-col overflow-hidden">
       <div className="flex min-h-0 flex-1">
-        <div className="hidden md:flex">
-          <ServerRail />
-        </div>
-        <ChannelSidebar />
         <main className="flex min-w-0 flex-1 flex-col bg-bg-primary">{children}</main>
-        <MemberList />
       </div>
       <MobileNav />
       <Toasts />
