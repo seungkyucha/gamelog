@@ -191,10 +191,10 @@ function Tweet({
 }) {
   const isMe = member.id === ME_ID;
   return (
-    <article className="flex gap-3 p-4 transition-colors hover:bg-[#34363C]/60">
-      <Avatar member={member} size={42} />
-      <div className="min-w-0 flex-1">
+    <article className="p-4 transition-colors hover:bg-[#34363C]/60">
+      <div className="min-w-0">
         <div className="flex flex-wrap items-center gap-x-1.5 gap-y-1">
+          <Avatar member={member} size={18} />
           <span className="text-[15px] font-bold text-txt-header">{isMe ? "나" : member.name}</span>
           <span className="text-[13px] text-txt-faint">@{member.id}</span>
           {source && <SourceBadge source={source} />}
