@@ -28,9 +28,13 @@ export default function VlogPage() {
     return `${h}시간 ${m}분 후 자동 합성`;
   }, [now]);
 
+  // 최신순 정렬: 최근 시간대가 맨 위, 같은 시간대 안에서도 최신 클립부터
   const byHour = useMemo(() => {
-    const hours = [...new Set(todayClips.map((c) => c.hour))].sort((a, b) => a - b);
-    return hours.map((h) => ({ hour: h, clips: todayClips.filter((c) => c.hour === h) }));
+    const hours = [...new Set(todayClips.map((c) => c.hour))].sort((a, b) => b - a);
+    return hours.map((h) => ({
+      hour: h,
+      clips: todayClips.filter((c) => c.hour === h).sort((a, b) => b.minute - a.minute),
+    }));
   }, [todayClips]);
 
   return (
