@@ -101,8 +101,8 @@ export function CaptureModal({
     if (!stream) return;
     const chunks: BlobPart[] = [];
     let recorder: MediaRecorder;
-    // 비트레이트 제한: 5초 클립도 서버 업로드 한도(1MB) 안에 들어오도록
-    const opts = { videoBitsPerSecond: 800_000 };
+    // 비트레이트 제한: 5초 클립도 서버 업로드 한도 안에 들어오도록
+    const opts = { videoBitsPerSecond: 600_000 };
     try {
       recorder = new MediaRecorder(stream, { mimeType: "video/webm", ...opts });
     } catch {

@@ -295,7 +295,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       // 1순위: 서버 업로드 (모든 기기에서 보임) · 2순위: IndexedDB (이 기기 전용)
       try {
         const dataUrl = await blobToDataUrl(input.blob);
-        if (dataUrl.length < 900_000) {
+        if (dataUrl.length < 650_000) {
           const marker = await uploadMedia(dataUrl);
           if (marker) {
             videoKey = marker;
@@ -401,7 +401,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       let changed = false;
       for (const f of fields) {
         const v = updated[f];
-        if (v?.startsWith("data:") && v.length < 900_000) {
+        if (v?.startsWith("data:") && v.length < 650_000) {
           const marker = await uploadMedia(v);
           if (marker) {
             setMediaCache((m) => ({ ...m, [marker]: v }));
