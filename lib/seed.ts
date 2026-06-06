@@ -1,13 +1,20 @@
 import type { Clip, DiaryEntry, Game, Member, Quest, Reaction } from "./types";
 
 export const GAMES: Game[] = [
-  { id: "lol", name: "리그 오브 레전드", short: "LoL", color: "#C89B3C", emoji: "🧙" },
-  { id: "valo", name: "발로란트", short: "VALO", color: "#FF4655", emoji: "🎯" },
-  { id: "mc", name: "마인크래프트", short: "MC", color: "#62B47A", emoji: "⛏️" },
-  { id: "pubg", name: "배틀그라운드", short: "PUBG", color: "#F2A900", emoji: "🍳" },
-  { id: "ow", name: "오버워치 2", short: "OW2", color: "#F99E1A", emoji: "🛡️" },
-  { id: "zelda", name: "젤다의 전설", short: "ZELDA", color: "#6CC4A1", emoji: "🗡️" },
-  { id: "eldenring", name: "엘든링", short: "ER", color: "#C9A86A", emoji: "💍" },
+  { id: "lol", name: "리그 오브 레전드", short: "LoL", color: "#C89B3C", emoji: "🧙",
+    cover: "https://ddragon.leagueoflegends.com/cdn/img/champion/splash/Ahri_0.jpg" },
+  { id: "valo", name: "발로란트", short: "VALO", color: "#FF4655", emoji: "🎯",
+    cover: "https://media.valorant-api.com/agents/add6443a-41bd-e414-f6ad-e58d267f4e95/displayicon.png" },
+  { id: "mc", name: "마인크래프트", short: "MC", color: "#62B47A", emoji: "⛏️",
+    cover: "https://launchercontent.mojang.com/v2/images/26.2snapshot8540x540.jpg" },
+  { id: "pubg", name: "배틀그라운드", short: "PUBG", color: "#F2A900", emoji: "🍳",
+    cover: "https://cdn.cloudflare.steamstatic.com/steam/apps/578080/library_600x900.jpg" },
+  { id: "ow", name: "오버워치 2", short: "OW2", color: "#F99E1A", emoji: "🛡️",
+    cover: "https://cdn.cloudflare.steamstatic.com/steam/apps/2357570/library_600x900.jpg" },
+  { id: "zelda", name: "젤다의 전설", short: "ZELDA", color: "#6CC4A1", emoji: "🗡️",
+    cover: "https://upload.wikimedia.org/wikipedia/en/f/fb/The_Legend_of_Zelda_Tears_of_the_Kingdom_cover.jpg" },
+  { id: "eldenring", name: "엘든링", short: "ER", color: "#C9A86A", emoji: "💍",
+    cover: "https://cdn.cloudflare.steamstatic.com/steam/apps/1245620/library_600x900.jpg" },
   { id: "tbh", name: "Task Bar Heroes", short: "TBH", color: "#7B68EE", emoji: "🦸" },
 ];
 

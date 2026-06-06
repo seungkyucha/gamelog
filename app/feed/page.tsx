@@ -3,6 +3,7 @@
 import { Avatar } from "@/components/Avatar";
 import { ChannelHeader } from "@/components/ChannelHeader";
 import { ClipMedia } from "@/components/ClipCard";
+import { GameCover } from "@/components/GameCover";
 import { generateFeed, type FeedEvent, type FeedType } from "@/lib/feed";
 import { GAMES, ME_ID, MEMBERS } from "@/lib/seed";
 import { useStore } from "@/lib/store";
@@ -126,9 +127,10 @@ function ConnectCard({
   );
 }
 
-/** 통일된 피드 카드 셸: 타입 컬러 액센트 바 + 헤드라인/서브라인 (전체 폭 사용) */
+/** 통일된 피드 카드 셸: 좌측 게임 타이틀 이미지 + 타입 컬러 액센트 바 + 헤드라인/서브라인 */
 function FeedShell({
   accent,
+  gameId,
   member,
   source,
   hour,
@@ -138,6 +140,7 @@ function FeedShell({
   right,
 }: {
   accent: string;
+  gameId: string;
   member: (typeof MEMBERS)[number];
   source?: "steam" | "opgg";
   hour: number;
@@ -151,6 +154,8 @@ function FeedShell({
     <div className="relative overflow-hidden rounded-lg bg-bg-secondary transition-colors hover:bg-[#34363C]">
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accent }} />
       <div className="flex items-center gap-3 p-3 pl-4">
+        {/* 게임 정사각형 타이틀 이미지 */}
+        <GameCover gameId={gameId} size={52} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <Avatar member={member} size={16} />
@@ -197,7 +202,7 @@ function EventCard({ e }: { e: FeedEvent }) {
   const isMe = e.memberId === ME_ID;
   const requested = joinRequests.includes(e.memberId);
 
-  const base = { member, source: e.source, hour: e.hour, minute: e.minute };
+  const base = { member, source: e.source, hour: e.hour, minute: e.minute, gameId: e.gameId };
   const style = TYPE_STYLE[e.type];
 
   switch (e.type) {
@@ -414,6 +419,8 @@ function ClipFeedCard({ c }: { c: Clip }) {
     >
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: style.accent }} />
       <div className="flex items-center gap-3 p-3 pl-4">
+        {/* 게임 정사각형 타이틀 이미지 */}
+        <GameCover gameId={c.gameId} size={52} />
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <Avatar member={member} size={16} />

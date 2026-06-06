@@ -4,6 +4,8 @@ export interface Game {
   short: string;
   color: string;
   emoji: string;
+  /** 정사각형 타이틀 이미지 URL (없으면 컬러 타일 폴백) */
+  cover?: string;
 }
 
 export type MemberStatus = "online" | "ingame" | "idle" | "offline";
