@@ -22,6 +22,7 @@ import {
   Swords,
   TrendingUp,
   Users,
+  X,
 } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -346,6 +347,46 @@ function EventCard({ e }: { e: FeedEvent }) {
   );
 }
 
+/** 계정 연동 팝업 */
+function ConnectModal({ onClose }: { onClose: () => void }) {
+  const { integrations } = useStore();
+  const linkedAny = Boolean(integrations.steam || integrations.riot);
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
+      <div
+        className="w-full max-w-md animate-pop-in rounded-lg bg-bg-secondary shadow-elev-high"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <header className="flex items-center justify-between px-4 pt-4">
+          <h3 className="text-lg font-bold text-txt-header">계정 연동 🔗</h3>
+          <button onClick={onClose} className="rounded p-1 text-txt-muted hover:bg-bg-modifier hover:text-txt-normal">
+            <X size={20} />
+          </button>
+        </header>
+        <div className="space-y-2 p-4">
+          <ConnectCard
+            kind="steam"
+            title="Steam"
+            placeholder="Steam ID 입력 (예: gamer_sca)"
+            desc="플레이 기록·업적 자동 수집"
+          />
+          <ConnectCard
+            kind="riot"
+            title="Riot · OP.GG"
+            placeholder="소환사명#태그 (예: 스카#KR1)"
+            desc="롤·발로란트 전적 자동 수집"
+          />
+          <p className="rounded-lg bg-bg-tertiary p-2.5 text-center text-[13px] text-txt-muted">
+            {linkedAny
+              ? "연동된 계정의 활동이 피드에 자동으로 올라가 📡"
+              : "계정을 연동하면 내 활동도 피드에 자동으로 올라가 📡"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /** 파티원 클립(브이로그/POTG)을 피드 카드로 노출 */
 function ClipFeedCard({ c }: { c: Clip }) {
   const member = MEMBERS.find((m) => m.id === c.memberId)!;
@@ -387,8 +428,10 @@ function ClipFeedCard({ c }: { c: Clip }) {
 export default function FeedPage() {
   const { now, today, integrations, todayClips } = useStore();
   const [filter, setFilter] = useState<Filter>("all");
+  const [connectOpen, setConnectOpen] = useState(false);
 
   const linkedAny = Boolean(integrations.steam || integrations.riot);
+  const linkedCount = Number(Boolean(integrations.steam)) + Number(Boolean(integrations.riot));
 
   const items = useMemo<FeedItem[]>(() => {
     const events = generateFeed(today, now.getHours(), now.getMinutes(), linkedAny);
@@ -414,31 +457,18 @@ export default function FeedPage() {
         icon={Activity}
         name="게임-피드"
         topic="Steam · OP.GG 연동 + 파티 클립 — 접속, 업적, 전적, 브이로그, POTG가 한 줄로."
+        right={
+          <button
+            className={cn("btn btn-sm", !linkedAny && "btn-ghost ring-1 ring-bg-modifier")}
+            onClick={() => setConnectOpen(true)}
+          >
+            <Link2 size={14} />
+            {linkedAny ? `연동됨 ${linkedCount}/2` : "계정 연동"}
+          </button>
+        }
       />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[740px] space-y-4 p-4 pb-10">
-          {/* 계정 연동 */}
-          <div className="space-y-2">
-            <p className="group-label">계정 연동</p>
-            <ConnectCard
-              kind="steam"
-              title="Steam"
-              placeholder="Steam ID 입력 (예: gamer_sca)"
-              desc="플레이 기록·업적 자동 수집"
-            />
-            <ConnectCard
-              kind="riot"
-              title="Riot · OP.GG"
-              placeholder="소환사명#태그 (예: 스카#KR1)"
-              desc="롤·발로란트 전적 자동 수집"
-            />
-            {!linkedAny && (
-              <p className="rounded-lg bg-bg-secondary p-2.5 text-center text-[13px] text-txt-muted">
-                계정을 연동하면 <span className="font-semibold text-txt-normal">내 활동도</span> 피드에 자동으로 올라가 📡
-              </p>
-            )}
-          </div>
-
           {/* 필터 */}
           <div className="flex flex-wrap gap-1.5">
             {FILTERS.map((f) => (
@@ -475,6 +505,7 @@ export default function FeedPage() {
           )}
         </div>
       </div>
+      {connectOpen && <ConnectModal onClose={() => setConnectOpen(false)} />}
     </>
   );
 }
