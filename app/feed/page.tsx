@@ -7,17 +7,39 @@ import { generateFeed, type FeedEvent, type FeedType } from "@/lib/feed";
 import { GAMES, ME_ID, MEMBERS } from "@/lib/seed";
 import { useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
-import { cn, fmtTime } from "@/lib/utils";
-import { Activity, Link2, Link2Off, Medal, Play, Swords, TrendingUp } from "lucide-react";
+import { cn, fmtMinutes, fmtTime } from "@/lib/utils";
+import {
+  Activity,
+  Crown,
+  Flame,
+  Hourglass,
+  Library,
+  Link2,
+  Link2Off,
+  LogOut,
+  Medal,
+  Play,
+  Swords,
+  TrendingUp,
+  Users,
+} from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
-type Filter = "all" | FeedType | "clip";
+type Filter = "all" | "clip" | "session" | "match" | "achievement" | "rank";
+
+/** 필터 그룹 → 포함되는 이벤트 타입 */
+const FILTER_TYPES: Record<Exclude<Filter, "all" | "clip">, FeedType[]> = {
+  session: ["start", "end"],
+  match: ["match", "mvp", "streak", "duo"],
+  achievement: ["achievement", "milestone", "library"],
+  rank: ["rank"],
+};
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "전체" },
   { key: "clip", label: "📹 클립" },
-  { key: "start", label: "🎮 접속" },
+  { key: "session", label: "🎮 접속" },
   { key: "match", label: "⚔️ 전적" },
   { key: "achievement", label: "🏅 업적" },
   { key: "rank", label: "📈 랭크" },
@@ -159,37 +181,138 @@ function EventCard({ e }: { e: FeedEvent }) {
           </div>
         )}
 
-        {e.type === "match" && e.match && (
-          <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-bg-input p-2.5">
-            <span
+        {e.type === "match" && e.match && (() => {
+          const chicken = e.gameId === "pubg" && e.match!.win;
+          return (
+            <div
               className={cn(
-                "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[13px] font-black text-white",
-                e.match.win ? "bg-status-online" : "bg-status-danger"
+                "mt-1.5 flex items-center gap-3 rounded-lg p-2.5",
+                chicken ? "bg-gradient-to-r from-accent-yellow/30 to-bg-input" : "bg-bg-input"
               )}
             >
-              {e.match.win ? "승" : "패"}
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-txt-normal">
-                {game.emoji} {game.name} · {e.match.champion}
-              </p>
-              <p className="text-[13px] text-txt-muted">
-                <Swords size={12} className="mr-0.5 inline" />
-                KDA {e.match.kda} · 스코어 {e.match.score}
-              </p>
-            </div>
-            {e.match.lp !== undefined && (
               <span
                 className={cn(
-                  "shrink-0 text-[14px] font-black",
-                  e.match.lp > 0 ? "text-accent-green" : "text-accent-red"
+                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[13px] font-black",
+                  chicken
+                    ? "bg-accent-yellow text-lg text-black"
+                    : e.match!.win
+                      ? "bg-status-online text-white"
+                      : "bg-status-danger text-white"
                 )}
               >
-                {e.match.lp > 0 ? `+${e.match.lp}` : e.match.lp} LP
+                {chicken ? "🍗" : e.match!.win ? "승" : "패"}
               </span>
-            )}
+              <div className="min-w-0 flex-1">
+                <p className="text-[14px] font-semibold text-txt-normal">
+                  {chicken && <span className="font-black text-accent-yellow">치킨 디너! </span>}
+                  {game.emoji} {game.name} · {e.match!.champion}
+                </p>
+                <p className="text-[13px] text-txt-muted">
+                  <Swords size={12} className="mr-0.5 inline" />
+                  KDA {e.match!.kda} · 스코어 {e.match!.score}
+                </p>
+              </div>
+              {e.match!.lp !== undefined && (
+                <span
+                  className={cn(
+                    "shrink-0 text-[14px] font-black",
+                    e.match!.lp! > 0 ? "text-accent-green" : "text-accent-red"
+                  )}
+                >
+                  {e.match!.lp! > 0 ? `+${e.match!.lp}` : e.match!.lp} LP
+                </span>
+              )}
+            </div>
+          );
+        })()}
+
+        {e.type === "end" && e.end && (
+          <p className="mt-1 text-[14px] text-txt-normal">
+            <LogOut size={13} className="mr-1 inline text-txt-muted" />
+            <span className="font-semibold" style={{ color: game.color }}>
+              {game.emoji} {game.name}
+            </span>
+            을(를) <span className="font-bold text-txt-header">{fmtMinutes(e.end.minutes)}</span> 플레이하고 종료했어
+          </p>
+        )}
+
+        {e.type === "mvp" && e.mvp && (
+          <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-brand/30 to-transparent p-2.5">
+            <Crown size={24} className="shrink-0 text-accent-yellow" />
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold text-txt-header">매치 MVP 선정! 👑</p>
+              <p className="text-[13px] text-txt-muted">
+                {game.emoji} {game.name} · {e.mvp.champion} · KDA {e.mvp.kda}
+              </p>
+            </div>
           </div>
         )}
+
+        {e.type === "streak" && e.streak && (
+          <div
+            className={cn(
+              "mt-1.5 flex items-center gap-3 rounded-lg p-2.5",
+              e.streak.win
+                ? "bg-gradient-to-r from-accent-red/25 to-transparent"
+                : "bg-gradient-to-r from-bg-input to-transparent"
+            )}
+          >
+            <Flame size={24} className={cn("shrink-0", e.streak.win ? "text-accent-red" : "text-txt-faint")} />
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold text-txt-header">
+                {e.streak.win ? `${e.streak.count}연승 달성 중! 🔥` : `${e.streak.count}연패... 위로가 필요해 🫠`}
+              </p>
+              <p className="text-[13px] text-txt-muted">
+                {game.emoji} {game.name} · {e.streak.win ? "기세를 몰아가는 중" : "콕 찔러서 한 판 같이 해줘"}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {e.type === "milestone" && e.milestone && (
+          <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-txt-link/20 to-transparent p-2.5">
+            <Hourglass size={24} className="shrink-0 text-txt-link" />
+            <div className="min-w-0">
+              <p className="text-[14px] font-bold text-txt-header">
+                누적 플레이 <span className="text-txt-link">{e.milestone.hours}시간</span> 달성 ⏳
+              </p>
+              <p className="text-[13px] text-txt-muted">
+                {game.emoji} {game.name} · 이 정도면 인생 게임 아니야?
+              </p>
+            </div>
+          </div>
+        )}
+
+        {e.type === "library" && (
+          <p className="mt-1 text-[14px] text-txt-normal">
+            <Library size={13} className="mr-1 inline text-accent-green" />
+            라이브러리에{" "}
+            <span className="font-semibold" style={{ color: game.color }}>
+              {game.emoji} {game.name}
+            </span>
+            을(를) 새로 추가했어 — 같이 할 사람? 🙌
+          </p>
+        )}
+
+        {e.type === "duo" && e.duo && (() => {
+          const partner = MEMBERS.find((m) => m.id === e.duo!.withMemberId);
+          return (
+            <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-accent-fuchsia/25 to-transparent p-2.5">
+              <Users size={24} className="shrink-0 text-accent-fuchsia" />
+              <div className="min-w-0">
+                <p className="text-[14px] font-bold text-txt-header">
+                  {member.name} & {partner?.name ?? "파티원"}이 같은 판에서 플레이! —{" "}
+                  <span className={e.duo!.win ? "text-accent-green" : "text-accent-red"}>
+                    {e.duo!.win ? "승리" : "패배"}
+                  </span>
+                </p>
+                <p className="text-[13px] text-txt-muted">
+                  {game.emoji} {game.name} · 듀오 케미 {e.duo!.win ? "증명 완료 🤝" : "다음 판엔 이긴다"}
+                </p>
+              </div>
+            </div>
+          );
+        })()}
 
         {e.type === "achievement" && e.achievement && (
           <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-accent-yellow/20 to-transparent p-2.5">
@@ -283,7 +406,7 @@ export default function FeedPage() {
       ? items
       : filter === "clip"
         ? items.filter((i) => i.kind === "clip")
-        : items.filter((i) => i.kind === "event" && i.e.type === filter);
+        : items.filter((i) => i.kind === "event" && FILTER_TYPES[filter].includes(i.e.type));
 
   return (
     <>

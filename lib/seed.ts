@@ -7,6 +7,8 @@ export const GAMES: Game[] = [
   { id: "pubg", name: "배틀그라운드", short: "PUBG", color: "#F2A900", emoji: "🍳" },
   { id: "ow", name: "오버워치 2", short: "OW2", color: "#F99E1A", emoji: "🛡️" },
   { id: "zelda", name: "젤다의 전설", short: "ZELDA", color: "#6CC4A1", emoji: "🗡️" },
+  { id: "eldenring", name: "엘든링", short: "ER", color: "#C9A86A", emoji: "💍" },
+  { id: "tbh", name: "Task Bar Heroes", short: "TBH", color: "#7B68EE", emoji: "🦸" },
 ];
 
 export const ME_ID = "me";
