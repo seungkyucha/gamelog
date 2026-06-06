@@ -8,6 +8,7 @@ import { GAMES, ME_ID, MEMBERS } from "@/lib/seed";
 import { useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
 import { cn, fmtMinutes, fmtTime } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   Crown,
@@ -20,12 +21,15 @@ import {
   Medal,
   Play,
   Swords,
+  Target,
   TrendingUp,
   Users,
+  Video,
   X,
+  Zap,
 } from "lucide-react";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 
 type Filter = "all" | "clip" | "session" | "match" | "achievement" | "rank";
 
@@ -141,6 +145,82 @@ function ConnectCard({
   );
 }
 
+/** 통일된 피드 카드 셸: 타입 컬러 액센트 바 + 아이콘 칩 + 헤드라인/서브라인 */
+function FeedShell({
+  accent,
+  icon,
+  emoji,
+  member,
+  source,
+  hour,
+  minute,
+  headline,
+  sub,
+  right,
+}: {
+  accent: string;
+  icon?: LucideIcon;
+  emoji?: string;
+  member: (typeof MEMBERS)[number];
+  source?: "steam" | "opgg";
+  hour: number;
+  minute: number;
+  headline: ReactNode;
+  sub: ReactNode;
+  right?: ReactNode;
+}) {
+  const Icon = icon;
+  const isMe = member.id === ME_ID;
+  return (
+    <div className="relative overflow-hidden rounded-lg bg-bg-secondary transition-colors hover:bg-[#34363C]">
+      <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accent }} />
+      <div className="flex items-center gap-3 p-3 pl-4">
+        {/* 타입 아이콘 칩 — 한눈에 어떤 활동인지 */}
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl"
+          style={{ background: `${accent}26`, color: accent }}
+        >
+          {emoji ?? (Icon && <Icon size={20} />)}
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <Avatar member={member} size={16} />
+            <span className="text-[12px] font-semibold text-txt-muted">{isMe ? "나" : member.name}</span>
+            {source && <SourceBadge source={source} />}
+            <span className="ml-auto shrink-0 text-xxs text-txt-faint">{fmtTime(hour, minute)}</span>
+          </div>
+          <p className="mt-0.5 truncate text-[15px] font-bold leading-tight text-txt-header">{headline}</p>
+          <p className="truncate text-[13px] text-txt-muted">{sub}</p>
+        </div>
+        {right && <div className="shrink-0">{right}</div>}
+      </div>
+    </div>
+  );
+}
+
+/** 게임명 강조 칩 (서브라인용) */
+function GameTag({ gameId }: { gameId: string }) {
+  const game = GAMES.find((g) => g.id === gameId)!;
+  return (
+    <span className="font-semibold" style={{ color: game.color }}>
+      {game.emoji} {game.name}
+    </span>
+  );
+}
+
+const TYPE_STYLE: Record<FeedType, { accent: string; icon: LucideIcon }> = {
+  start: { accent: "#23A55A", icon: Play },
+  end: { accent: "#80848E", icon: LogOut },
+  match: { accent: "#23A55A", icon: Swords }, // 승패에 따라 동적 변경
+  mvp: { accent: "#F0B232", icon: Crown },
+  achievement: { accent: "#FEE75C", icon: Medal },
+  rank: { accent: "#5865F2", icon: TrendingUp },
+  milestone: { accent: "#00A8FC", icon: Hourglass },
+  library: { accent: "#57F287", icon: Library },
+  streak: { accent: "#ED4245", icon: Flame },
+  duo: { accent: "#EB459E", icon: Users },
+};
+
 function EventCard({ e }: { e: FeedEvent }) {
   const { requestJoin, joinRequests, pushToast } = useStore();
   const member = MEMBERS.find((m) => m.id === e.memberId)!;
@@ -148,203 +228,171 @@ function EventCard({ e }: { e: FeedEvent }) {
   const isMe = e.memberId === ME_ID;
   const requested = joinRequests.includes(e.memberId);
 
-  return (
-    <div className="card flex gap-3 p-3">
-      <Avatar member={member} size={36} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[14px] font-bold text-txt-header">{isMe ? "나" : member.name}</span>
-          <SourceBadge source={e.source} />
-          <span className="ml-auto text-xxs text-txt-faint">{fmtTime(e.hour, e.minute)}</span>
-        </div>
+  const base = { member, source: e.source, hour: e.hour, minute: e.minute };
+  const style = TYPE_STYLE[e.type];
 
-        {e.type === "start" && (
-          <div className="mt-1 flex flex-wrap items-center gap-2">
-            <p className="text-[14px] text-txt-normal">
-              <Play size={13} className="mr-1 inline text-status-online" />
-              <span className="font-semibold" style={{ color: game.color }}>
-                {game.emoji} {game.name}
-              </span>
-              을(를) 시작했어
-            </p>
-            {!isMe && (
+  switch (e.type) {
+    case "start":
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={<>{game.name} 시작</>}
+          sub={<><GameTag gameId={e.gameId} /> · 지금 플레이 중이야</>}
+          right={
+            !isMe && (
               <button
-                className={cn("btn btn-sm ml-auto", requested && "btn-ghost")}
+                className={cn("btn btn-sm", requested && "btn-ghost")}
                 disabled={requested}
                 onClick={() => {
                   requestJoin(e.memberId);
                   pushToast(`${member.name}에게 합류 요청을 보냈어!`, "🎮");
                 }}
               >
-                {requested ? "요청 보냄 ✓" : "나도 합류"}
+                {requested ? "요청 ✓" : "합류"}
               </button>
-            )}
-          </div>
-        )}
+            )
+          }
+        />
+      );
 
-        {e.type === "match" && e.match && (() => {
-          const chicken = e.gameId === "pubg" && e.match!.win;
-          return (
-            <div
-              className={cn(
-                "mt-1.5 flex items-center gap-3 rounded-lg p-2.5",
-                chicken ? "bg-gradient-to-r from-accent-yellow/30 to-bg-input" : "bg-bg-input"
-              )}
-            >
-              <span
-                className={cn(
-                  "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg text-[13px] font-black",
-                  chicken
-                    ? "bg-accent-yellow text-lg text-black"
-                    : e.match!.win
-                      ? "bg-status-online text-white"
-                      : "bg-status-danger text-white"
-                )}
-              >
-                {chicken ? "🍗" : e.match!.win ? "승" : "패"}
+    case "end":
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={<>{game.name} 종료</>}
+          sub={<><GameTag gameId={e.gameId} /> · {fmtMinutes(e.end?.minutes ?? 0)} 플레이</>}
+        />
+      );
+
+    case "match": {
+      const m = e.match!;
+      const chicken = e.gameId === "pubg" && m.win;
+      const accent = chicken ? "#FEE75C" : m.win ? "#23A55A" : "#F23F43";
+      return (
+        <FeedShell
+          {...base}
+          accent={accent}
+          emoji={chicken ? "🍗" : undefined}
+          icon={chicken ? undefined : Swords}
+          headline={
+            chicken ? (
+              <span className="text-accent-yellow">치킨 디너!</span>
+            ) : (
+              <>
+                <span className={m.win ? "text-accent-green" : "text-accent-red"}>{m.win ? "승리" : "패배"}</span>
+                {" — "}
+                {game.name}
+              </>
+            )
+          }
+          sub={<>{m.champion} · KDA {m.kda} · {e.gameId === "pubg" ? `등수 ${m.score}` : `스코어 ${m.score}`}</>}
+          right={
+            m.lp !== undefined && (
+              <span className={cn("text-[15px] font-black", m.lp > 0 ? "text-accent-green" : "text-accent-red")}>
+                {m.lp > 0 ? `+${m.lp}` : m.lp} LP
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-semibold text-txt-normal">
-                  {chicken && <span className="font-black text-accent-yellow">치킨 디너! </span>}
-                  {game.emoji} {game.name} · {e.match!.champion}
-                </p>
-                <p className="text-[13px] text-txt-muted">
-                  <Swords size={12} className="mr-0.5 inline" />
-                  KDA {e.match!.kda} · 스코어 {e.match!.score}
-                </p>
-              </div>
-              {e.match!.lp !== undefined && (
-                <span
-                  className={cn(
-                    "shrink-0 text-[14px] font-black",
-                    e.match!.lp! > 0 ? "text-accent-green" : "text-accent-red"
-                  )}
-                >
-                  {e.match!.lp! > 0 ? `+${e.match!.lp}` : e.match!.lp} LP
-                </span>
-              )}
-            </div>
-          );
-        })()}
+            )
+          }
+        />
+      );
+    }
 
-        {e.type === "end" && e.end && (
-          <p className="mt-1 text-[14px] text-txt-normal">
-            <LogOut size={13} className="mr-1 inline text-txt-muted" />
-            <span className="font-semibold" style={{ color: game.color }}>
-              {game.emoji} {game.name}
-            </span>
-            을(를) <span className="font-bold text-txt-header">{fmtMinutes(e.end.minutes)}</span> 플레이하고 종료했어
-          </p>
-        )}
+    case "mvp":
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={<>매치 MVP 선정 👑</>}
+          sub={<><GameTag gameId={e.gameId} /> · {e.mvp?.champion} · KDA {e.mvp?.kda}</>}
+        />
+      );
 
-        {e.type === "mvp" && e.mvp && (
-          <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-brand/30 to-transparent p-2.5">
-            <Crown size={24} className="shrink-0 text-accent-yellow" />
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold text-txt-header">매치 MVP 선정! 👑</p>
-              <p className="text-[13px] text-txt-muted">
-                {game.emoji} {game.name} · {e.mvp.champion} · KDA {e.mvp.kda}
-              </p>
-            </div>
-          </div>
-        )}
+    case "achievement":
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={<>업적 &ldquo;{e.achievement?.name}&rdquo;</>}
+          sub={<><GameTag gameId={e.gameId} /> · 상위 {e.achievement?.rarity}%만 달성한 업적 ✨</>}
+        />
+      );
 
-        {e.type === "streak" && e.streak && (
-          <div
-            className={cn(
-              "mt-1.5 flex items-center gap-3 rounded-lg p-2.5",
-              e.streak.win
-                ? "bg-gradient-to-r from-accent-red/25 to-transparent"
-                : "bg-gradient-to-r from-bg-input to-transparent"
-            )}
-          >
-            <Flame size={24} className={cn("shrink-0", e.streak.win ? "text-accent-red" : "text-txt-faint")} />
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold text-txt-header">
-                {e.streak.win ? `${e.streak.count}연승 달성 중! 🔥` : `${e.streak.count}연패... 위로가 필요해 🫠`}
-              </p>
-              <p className="text-[13px] text-txt-muted">
-                {game.emoji} {game.name} · {e.streak.win ? "기세를 몰아가는 중" : "콕 찔러서 한 판 같이 해줘"}
-              </p>
-            </div>
-          </div>
-        )}
+    case "rank":
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={
+            <>
+              {e.rank?.from} → <span className="text-txt-link">{e.rank?.to}</span> 승급!
+            </>
+          }
+          sub={<><GameTag gameId={e.gameId} /> · 축하 리액션을 남겨줘 🎉</>}
+        />
+      );
 
-        {e.type === "milestone" && e.milestone && (
-          <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-txt-link/20 to-transparent p-2.5">
-            <Hourglass size={24} className="shrink-0 text-txt-link" />
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold text-txt-header">
-                누적 플레이 <span className="text-txt-link">{e.milestone.hours}시간</span> 달성 ⏳
-              </p>
-              <p className="text-[13px] text-txt-muted">
-                {game.emoji} {game.name} · 이 정도면 인생 게임 아니야?
-              </p>
-            </div>
-          </div>
-        )}
+    case "milestone":
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={<>누적 {e.milestone?.hours}시간 달성 ⏳</>}
+          sub={<><GameTag gameId={e.gameId} /> · 이 정도면 인생 게임 인정</>}
+        />
+      );
 
-        {e.type === "library" && (
-          <p className="mt-1 text-[14px] text-txt-normal">
-            <Library size={13} className="mr-1 inline text-accent-green" />
-            라이브러리에{" "}
-            <span className="font-semibold" style={{ color: game.color }}>
-              {game.emoji} {game.name}
-            </span>
-            을(를) 새로 추가했어 — 같이 할 사람? 🙌
-          </p>
-        )}
+    case "library":
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={<>새 게임 추가 — {game.name}</>}
+          sub={<><GameTag gameId={e.gameId} /> · 같이 할 사람? 🙌</>}
+        />
+      );
 
-        {e.type === "duo" && e.duo && (() => {
-          const partner = MEMBERS.find((m) => m.id === e.duo!.withMemberId);
-          return (
-            <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-accent-fuchsia/25 to-transparent p-2.5">
-              <Users size={24} className="shrink-0 text-accent-fuchsia" />
-              <div className="min-w-0">
-                <p className="text-[14px] font-bold text-txt-header">
-                  {member.name} & {partner?.name ?? "파티원"}이 같은 판에서 플레이! —{" "}
-                  <span className={e.duo!.win ? "text-accent-green" : "text-accent-red"}>
-                    {e.duo!.win ? "승리" : "패배"}
-                  </span>
-                </p>
-                <p className="text-[13px] text-txt-muted">
-                  {game.emoji} {game.name} · 듀오 케미 {e.duo!.win ? "증명 완료 🤝" : "다음 판엔 이긴다"}
-                </p>
-              </div>
-            </div>
-          );
-        })()}
+    case "streak": {
+      const s = e.streak!;
+      return (
+        <FeedShell
+          {...base}
+          accent={s.win ? "#ED4245" : "#80848E"}
+          icon={Flame}
+          headline={s.win ? <>{s.count}연승 중! 🔥</> : <>{s.count}연패... 🫠</>}
+          sub={<><GameTag gameId={e.gameId} /> · {s.win ? "기세를 몰아가는 중" : "콕 찔러서 한 판 같이 해줘"}</>}
+        />
+      );
+    }
 
-        {e.type === "achievement" && e.achievement && (
-          <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-accent-yellow/20 to-transparent p-2.5">
-            <Medal size={24} className="shrink-0 text-accent-yellow" />
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold text-txt-header">
-                업적 달성 — &ldquo;{e.achievement.name}&rdquo;
-              </p>
-              <p className="text-[13px] text-txt-muted">
-                {game.emoji} {game.name} · 전체 플레이어의 {e.achievement.rarity}%만 달성 ✨
-              </p>
-            </div>
-          </div>
-        )}
-
-        {e.type === "rank" && e.rank && (
-          <div className="mt-1.5 flex items-center gap-3 rounded-lg bg-gradient-to-r from-brand/25 to-transparent p-2.5">
-            <TrendingUp size={24} className="shrink-0 text-txt-link" />
-            <div className="min-w-0">
-              <p className="text-[14px] font-bold text-txt-header">
-                랭크 승급! {e.rank.from} → <span className="text-txt-link">{e.rank.to}</span>
-              </p>
-              <p className="text-[13px] text-txt-muted">
-                {game.emoji} {game.name} · 축하 리액션을 남겨줘 🎉
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-    </div>
-  );
+    case "duo": {
+      const partner = MEMBERS.find((m) => m.id === e.duo?.withMemberId);
+      return (
+        <FeedShell
+          {...base}
+          accent={style.accent}
+          icon={style.icon}
+          headline={
+            <>
+              {member.name} & {partner?.name ?? "파티원"} 듀오 —{" "}
+              <span className={e.duo?.win ? "text-accent-green" : "text-accent-red"}>
+                {e.duo?.win ? "승리" : "패배"}
+              </span>
+            </>
+          }
+          sub={<><GameTag gameId={e.gameId} /> · 듀오 케미 {e.duo?.win ? "증명 완료 🤝" : "다음 판엔 이긴다"}</>}
+        />
+      );
+    }
+  }
 }
 
 /** 계정 연동 팝업 */
@@ -387,38 +435,54 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
   );
 }
 
+const CLIP_STYLE: Record<Clip["kind"], { accent: string; icon: LucideIcon }> = {
+  vlog: { accent: "#5865F2", icon: Video },
+  moment: { accent: "#EB459E", icon: Zap },
+  quest: { accent: "#F0B232", icon: Target },
+  now: { accent: "#00A8FC", icon: Activity },
+};
+
 /** 파티원 클립(브이로그/POTG)을 피드 카드로 노출 */
 function ClipFeedCard({ c }: { c: Clip }) {
   const member = MEMBERS.find((m) => m.id === c.memberId)!;
-  const game = GAMES.find((g) => g.id === c.gameId)!;
   const meta = CLIP_LABEL[c.kind];
+  const style = CLIP_STYLE[c.kind];
   const isMe = c.memberId === ME_ID;
+  const Icon = style.icon;
 
   return (
-    <Link href={meta.href} className="card flex gap-3 p-3 transition-colors hover:bg-bg-modifier/40">
-      <Avatar member={member} size={36} />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-[14px] font-bold text-txt-header">{isMe ? "나" : member.name}</span>
-          <span
-            className={cn(
-              "rounded px-1.5 py-0.5 text-[10px] font-bold text-white",
-              c.kind === "moment" ? "bg-accent-fuchsia" : c.kind === "quest" ? "bg-accent-yellow text-black" : "bg-brand"
-            )}
-          >
-            {meta.label}
-          </span>
-          <span className="ml-auto text-xxs text-txt-faint">{fmtTime(c.hour, c.minute)}</span>
+    <Link
+      href={meta.href}
+      className="relative block overflow-hidden rounded-lg bg-bg-secondary transition-colors hover:bg-[#34363C]"
+    >
+      <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: style.accent }} />
+      <div className="flex items-center gap-3 p-3 pl-4">
+        <span
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
+          style={{ background: `${style.accent}26`, color: style.accent }}
+        >
+          <Icon size={20} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-1.5">
+            <Avatar member={member} size={16} />
+            <span className="text-[12px] font-semibold text-txt-muted">{isMe ? "나" : member.name}</span>
+            <span
+              className="rounded px-1.5 py-0.5 text-[10px] font-bold"
+              style={{ background: `${style.accent}33`, color: style.accent }}
+            >
+              {meta.label}
+            </span>
+            <span className="ml-auto shrink-0 text-xxs text-txt-faint">{fmtTime(c.hour, c.minute)}</span>
+          </div>
+          <p className="mt-0.5 truncate text-[15px] font-bold leading-tight text-txt-header">{c.caption}</p>
+          <p className="truncate text-[13px] text-txt-muted">
+            <GameTag gameId={c.gameId} /> · 탭해서 보기
+          </p>
         </div>
-        <p className="mt-1 truncate text-[14px] text-txt-normal">
-          <span className="font-semibold" style={{ color: game.color }}>
-            {game.emoji} {game.short}
-          </span>{" "}
-          · {c.caption}
-        </p>
-      </div>
-      <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg">
-        <ClipMedia clip={c} />
+        <div className="h-14 w-20 shrink-0 overflow-hidden rounded-lg ring-1 ring-bg-modifier">
+          <ClipMedia clip={c} />
+        </div>
       </div>
     </Link>
   );
