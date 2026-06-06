@@ -153,7 +153,10 @@ export function seedClips(key: string, currentHour: number): Clip[] {
       });
     }
   }
-  return clips.sort((a, b) => a.hour - b.hour || a.minute - b.minute);
+  return clips
+    // 준호의 "3연승 가즈아" 브이로그는 노출 제외 (사용자 요청)
+    .filter((c) => !(c.memberId === "junho" && c.caption === "3연승 가즈아"))
+    .sort((a, b) => a.hour - b.hour || a.minute - b.minute);
 }
 
 /** 친구들의 오늘 퀘스트 완료 여부 (결정적) */
