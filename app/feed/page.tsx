@@ -8,26 +8,7 @@ import { GAMES, ME_ID, MEMBERS } from "@/lib/seed";
 import { useStore } from "@/lib/store";
 import type { Clip } from "@/lib/types";
 import { cn, fmtMinutes, fmtTime } from "@/lib/utils";
-import type { LucideIcon } from "lucide-react";
-import {
-  Activity,
-  Crown,
-  Flame,
-  Hourglass,
-  Library,
-  Link2,
-  Link2Off,
-  LogOut,
-  Medal,
-  Play,
-  Swords,
-  Target,
-  TrendingUp,
-  Users,
-  Video,
-  X,
-  Zap,
-} from "lucide-react";
+import { Activity, Link2, Link2Off, X } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState, type ReactNode } from "react";
 
@@ -145,11 +126,9 @@ function ConnectCard({
   );
 }
 
-/** 통일된 피드 카드 셸: 타입 컬러 액센트 바 + 아이콘 칩 + 헤드라인/서브라인 */
+/** 통일된 피드 카드 셸: 타입 컬러 액센트 바 + 헤드라인/서브라인 (전체 폭 사용) */
 function FeedShell({
   accent,
-  icon,
-  emoji,
   member,
   source,
   hour,
@@ -159,8 +138,6 @@ function FeedShell({
   right,
 }: {
   accent: string;
-  icon?: LucideIcon;
-  emoji?: string;
   member: (typeof MEMBERS)[number];
   source?: "steam" | "opgg";
   hour: number;
@@ -169,19 +146,11 @@ function FeedShell({
   sub: ReactNode;
   right?: ReactNode;
 }) {
-  const Icon = icon;
   const isMe = member.id === ME_ID;
   return (
     <div className="relative overflow-hidden rounded-lg bg-bg-secondary transition-colors hover:bg-[#34363C]">
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: accent }} />
       <div className="flex items-center gap-3 p-3 pl-4">
-        {/* 타입 아이콘 칩 — 한눈에 어떤 활동인지 */}
-        <span
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-xl"
-          style={{ background: `${accent}26`, color: accent }}
-        >
-          {emoji ?? (Icon && <Icon size={20} />)}
-        </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <Avatar member={member} size={16} />
@@ -189,8 +158,8 @@ function FeedShell({
             {source && <SourceBadge source={source} />}
             <span className="ml-auto shrink-0 text-xxs text-txt-faint">{fmtTime(hour, minute)}</span>
           </div>
-          <p className="mt-0.5 truncate text-[15px] font-bold leading-tight text-txt-header">{headline}</p>
-          <p className="truncate text-[13px] text-txt-muted">{sub}</p>
+          <p className="mt-1 truncate text-[15px] font-bold leading-tight text-txt-header">{headline}</p>
+          <p className="mt-0.5 truncate text-[13px] text-txt-muted">{sub}</p>
         </div>
         {right && <div className="shrink-0">{right}</div>}
       </div>
@@ -208,17 +177,17 @@ function GameTag({ gameId }: { gameId: string }) {
   );
 }
 
-const TYPE_STYLE: Record<FeedType, { accent: string; icon: LucideIcon }> = {
-  start: { accent: "#23A55A", icon: Play },
-  end: { accent: "#80848E", icon: LogOut },
-  match: { accent: "#23A55A", icon: Swords }, // 승패에 따라 동적 변경
-  mvp: { accent: "#F0B232", icon: Crown },
-  achievement: { accent: "#FEE75C", icon: Medal },
-  rank: { accent: "#5865F2", icon: TrendingUp },
-  milestone: { accent: "#00A8FC", icon: Hourglass },
-  library: { accent: "#57F287", icon: Library },
-  streak: { accent: "#ED4245", icon: Flame },
-  duo: { accent: "#EB459E", icon: Users },
+const TYPE_STYLE: Record<FeedType, { accent: string }> = {
+  start: { accent: "#23A55A" },
+  end: { accent: "#80848E" },
+  match: { accent: "#23A55A" }, // 승패에 따라 동적 변경
+  mvp: { accent: "#F0B232" },
+  achievement: { accent: "#FEE75C" },
+  rank: { accent: "#5865F2" },
+  milestone: { accent: "#00A8FC" },
+  library: { accent: "#57F287" },
+  streak: { accent: "#ED4245" },
+  duo: { accent: "#EB459E" },
 };
 
 function EventCard({ e }: { e: FeedEvent }) {
@@ -237,7 +206,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={<>{game.name} 시작</>}
           sub={<><GameTag gameId={e.gameId} /> · 지금 플레이 중이야</>}
           right={
@@ -262,7 +230,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={<>{game.name} 종료</>}
           sub={<><GameTag gameId={e.gameId} /> · {fmtMinutes(e.end?.minutes ?? 0)} 플레이</>}
         />
@@ -276,11 +243,9 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={accent}
-          emoji={chicken ? "🍗" : undefined}
-          icon={chicken ? undefined : Swords}
           headline={
             chicken ? (
-              <span className="text-accent-yellow">치킨 디너!</span>
+              <span className="text-accent-yellow">🍗 치킨 디너!</span>
             ) : (
               <>
                 <span className={m.win ? "text-accent-green" : "text-accent-red"}>{m.win ? "승리" : "패배"}</span>
@@ -306,7 +271,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={<>매치 MVP 선정 👑</>}
           sub={<><GameTag gameId={e.gameId} /> · {e.mvp?.champion} · KDA {e.mvp?.kda}</>}
         />
@@ -317,7 +281,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={<>업적 &ldquo;{e.achievement?.name}&rdquo;</>}
           sub={<><GameTag gameId={e.gameId} /> · 상위 {e.achievement?.rarity}%만 달성한 업적 ✨</>}
         />
@@ -328,7 +291,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={
             <>
               {e.rank?.from} → <span className="text-txt-link">{e.rank?.to}</span> 승급!
@@ -343,7 +305,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={<>누적 {e.milestone?.hours}시간 달성 ⏳</>}
           sub={<><GameTag gameId={e.gameId} /> · 이 정도면 인생 게임 인정</>}
         />
@@ -354,7 +315,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={<>새 게임 추가 — {game.name}</>}
           sub={<><GameTag gameId={e.gameId} /> · 같이 할 사람? 🙌</>}
         />
@@ -366,7 +326,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={s.win ? "#ED4245" : "#80848E"}
-          icon={Flame}
           headline={s.win ? <>{s.count}연승 중! 🔥</> : <>{s.count}연패... 🫠</>}
           sub={<><GameTag gameId={e.gameId} /> · {s.win ? "기세를 몰아가는 중" : "콕 찔러서 한 판 같이 해줘"}</>}
         />
@@ -379,7 +338,6 @@ function EventCard({ e }: { e: FeedEvent }) {
         <FeedShell
           {...base}
           accent={style.accent}
-          icon={style.icon}
           headline={
             <>
               {member.name} & {partner?.name ?? "파티원"} 듀오 —{" "}
@@ -435,11 +393,11 @@ function ConnectModal({ onClose }: { onClose: () => void }) {
   );
 }
 
-const CLIP_STYLE: Record<Clip["kind"], { accent: string; icon: LucideIcon }> = {
-  vlog: { accent: "#5865F2", icon: Video },
-  moment: { accent: "#EB459E", icon: Zap },
-  quest: { accent: "#F0B232", icon: Target },
-  now: { accent: "#00A8FC", icon: Activity },
+const CLIP_STYLE: Record<Clip["kind"], { accent: string }> = {
+  vlog: { accent: "#5865F2" },
+  moment: { accent: "#EB459E" },
+  quest: { accent: "#F0B232" },
+  now: { accent: "#00A8FC" },
 };
 
 /** 파티원 클립(브이로그/POTG)을 피드 카드로 노출 */
@@ -448,7 +406,6 @@ function ClipFeedCard({ c }: { c: Clip }) {
   const meta = CLIP_LABEL[c.kind];
   const style = CLIP_STYLE[c.kind];
   const isMe = c.memberId === ME_ID;
-  const Icon = style.icon;
 
   return (
     <Link
@@ -457,12 +414,6 @@ function ClipFeedCard({ c }: { c: Clip }) {
     >
       <span className="absolute inset-y-0 left-0 w-[3px]" style={{ background: style.accent }} />
       <div className="flex items-center gap-3 p-3 pl-4">
-        <span
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl"
-          style={{ background: `${style.accent}26`, color: style.accent }}
-        >
-          <Icon size={20} />
-        </span>
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-1.5">
             <Avatar member={member} size={16} />

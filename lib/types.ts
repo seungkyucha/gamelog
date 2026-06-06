@@ -70,6 +70,8 @@ export interface CheckIn {
   /** dataURL (jpeg) */
   selfie?: string;
   screen?: string;
+  /** 후면 카메라 사진 (전면+후면 동시 촬영) */
+  rear?: string;
 }
 
 /** 외부 계정 연동 상태 (Steam / Riot·OP.GG) */

@@ -5,10 +5,8 @@ import { ChannelHeader } from "@/components/ChannelHeader";
 import { GAMES, ME_ID, MEMBERS } from "@/lib/seed";
 import { useStore } from "@/lib/store";
 import { cn } from "@/lib/utils";
-import { Camera, Eye, Gamepad2, MonitorUp, SwitchCamera, X } from "lucide-react";
+import { Camera, Eye, Gamepad2, MonitorUp, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-
-type Facing = "user" | "environment";
 
 function grabFrame(video: HTMLVideoElement, maxW = 640, mirror = false): string {
   const canvas = document.createElement("canvas");
@@ -25,68 +23,125 @@ function grabFrame(video: HTMLVideoElement, maxW = 640, mirror = false): string 
   return canvas.toDataURL("image/jpeg", 0.6);
 }
 
-/** 체크인 모달: 셀카 + (선택) 게임 화면 캡처 */
+/** 체크인 모달: 전면+후면 동시 촬영 (BeReal 스타일) + (선택) 게임 화면 캡처 */
 function CheckInModal({ onClose }: { onClose: () => void }) {
   const { setCheckIn, pushToast } = useStore();
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const frontVideoRef = useRef<HTMLVideoElement>(null);
+  const rearVideoRef = useRef<HTMLVideoElement>(null);
+  const frontStreamRef = useRef<MediaStream | null>(null);
+  const rearStreamRef = useRef<MediaStream | null>(null);
   const cancelledRef = useRef(false);
-  const [camReady, setCamReady] = useState(false);
-  const [facing, setFacing] = useState<Facing>("user");
-  const [hasMultiCam, setHasMultiCam] = useState(false);
+  const [frontReady, setFrontReady] = useState(false);
+  const [dual, setDual] = useState(false); // 전면+후면 동시 스트림 성공 여부
+  const [capturing, setCapturing] = useState(false);
   const [selfie, setSelfie] = useState<string | undefined>();
+  const [rear, setRear] = useState<string | undefined>();
   const [screen, setScreen] = useState<string | undefined>();
   const [caption, setCaption] = useState("");
   const [gameId, setGameId] = useState(GAMES[0].id);
 
-  const startStream = useCallback(async (face: Facing) => {
-    streamRef.current?.getTracks().forEach((t) => t.stop());
-    setCamReady(false);
+  const stopAll = useCallback(() => {
+    frontStreamRef.current?.getTracks().forEach((t) => t.stop());
+    rearStreamRef.current?.getTracks().forEach((t) => t.stop());
+    frontStreamRef.current = null;
+    rearStreamRef.current = null;
+  }, []);
+
+  /** 전면 스트림 + 가능하면 후면 스트림까지 동시에 연다 */
+  const openStreams = useCallback(async () => {
+    stopAll();
+    setFrontReady(false);
+    setDual(false);
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: face },
+      const front = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: "user" },
         audio: false,
       });
       if (cancelledRef.current) {
-        stream.getTracks().forEach((t) => t.stop());
+        front.getTracks().forEach((t) => t.stop());
         return;
       }
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play().catch(() => {});
-      }
-      setFacing(face);
-      setCamReady(true);
-      try {
-        const devices = await navigator.mediaDevices.enumerateDevices();
-        setHasMultiCam(devices.filter((d) => d.kind === "videoinput").length > 1);
-      } catch {
-        /* 무시 */
-      }
+      frontStreamRef.current = front;
+      setFrontReady(true);
     } catch {
-      if (!cancelledRef.current) setCamReady(false);
+      return; // 카메라 없음
     }
-  }, []);
+    // 후면 동시 스트림 시도 (지원 기기에서만 성공)
+    try {
+      const rearS = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { exact: "environment" } },
+        audio: false,
+      });
+      if (cancelledRef.current) {
+        rearS.getTracks().forEach((t) => t.stop());
+        return;
+      }
+      rearStreamRef.current = rearS;
+      setDual(true);
+    } catch {
+      setDual(false); // 동시 미지원 → 촬영 시 순차 폴백
+    }
+  }, [stopAll]);
 
   useEffect(() => {
     cancelledRef.current = false;
-    startStream("user");
+    openStreams();
     return () => {
       cancelledRef.current = true;
-      streamRef.current?.getTracks().forEach((t) => t.stop());
+      stopAll();
     };
-  }, [startStream]);
+  }, [openStreams, stopAll]);
 
-  const flipCamera = useCallback(() => {
-    setSelfie(undefined); // 전환하면 다시 찍기
-    startStream(facing === "user" ? "environment" : "user");
-  }, [facing, startStream]);
+  // 스트림을 비디오 엘리먼트에 연결 (다시 찍기 후 재연결 포함)
+  useEffect(() => {
+    if (!selfie && frontReady && frontVideoRef.current && frontStreamRef.current) {
+      frontVideoRef.current.srcObject = frontStreamRef.current;
+      frontVideoRef.current.play().catch(() => {});
+    }
+  }, [selfie, frontReady]);
+  useEffect(() => {
+    if (dual && !rear && !screen && rearVideoRef.current && rearStreamRef.current) {
+      rearVideoRef.current.srcObject = rearStreamRef.current;
+      rearVideoRef.current.play().catch(() => {});
+    }
+  }, [dual, rear, screen]);
 
-  const captureSelfie = useCallback(() => {
-    if (videoRef.current && camReady)
-      setSelfie(grabFrame(videoRef.current, 640, facing === "user"));
-  }, [camReady, facing]);
+  /** 전면+후면 한 번에 촬영. 동시 스트림 미지원 기기는 전면 → 후면 순차 자동 촬영 */
+  const captureBoth = useCallback(async () => {
+    if (!frontVideoRef.current || !frontReady || capturing) return;
+    setCapturing(true);
+    setSelfie(grabFrame(frontVideoRef.current, 640, true));
+    if (dual && rearVideoRef.current) {
+      // 두 스트림이 살아있으면 같은 순간을 동시에 캡처
+      setRear(grabFrame(rearVideoRef.current, 960));
+    } else {
+      // 순차 폴백: 전면을 멈추고 후면을 잠깐 열어 한 컷
+      try {
+        frontStreamRef.current?.getTracks().forEach((t) => t.stop());
+        const rearS = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: { exact: "environment" } },
+          audio: false,
+        });
+        const v = rearVideoRef.current;
+        if (v) {
+          v.srcObject = rearS;
+          await v.play().catch(() => {});
+          await new Promise((r) => setTimeout(r, 600));
+          setRear(grabFrame(v, 960));
+        }
+        rearS.getTracks().forEach((t) => t.stop());
+      } catch {
+        /* 후면 카메라 없음(데스크톱) — 셀카만 저장 */
+      }
+    }
+    setCapturing(false);
+  }, [dual, frontReady, capturing]);
+
+  const retake = useCallback(() => {
+    setSelfie(undefined);
+    setRear(undefined);
+    openStreams(); // 순차 폴백에서 전면이 멈췄을 수 있으니 다시 연다
+  }, [openStreams]);
 
   const captureScreen = useCallback(async () => {
     try {
@@ -103,10 +158,13 @@ function CheckInModal({ onClose }: { onClose: () => void }) {
   }, []);
 
   const save = () => {
-    setCheckIn({ caption: caption.trim() || "지금 이러고 있음", gameId, selfie, screen });
+    setCheckIn({ caption: caption.trim() || "지금 이러고 있음", gameId, selfie, screen, rear });
     pushToast("체크인 완료! 친구들이 볼 수 있어", "👀");
     onClose();
   };
+
+  const captured = Boolean(selfie || rear);
+  const bigPhoto = screen ?? rear;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
@@ -121,47 +179,61 @@ function CheckInModal({ onClose }: { onClose: () => void }) {
           </button>
         </header>
         <div className="space-y-4 p-4">
-          {/* BeReal 스타일: 화면(크게) + 셀카(작게 오버레이) */}
+          {/* BeReal 스타일: 후면/화면(크게) + 전면(작게 오버레이) */}
           <div className="relative aspect-video overflow-hidden rounded-lg bg-bg-tertiary">
-            {screen ? (
+            {bigPhoto ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={screen} alt="게임 화면" className="h-full w-full object-cover" />
+              <img src={bigPhoto} alt="후면/게임 화면" className="h-full w-full object-cover" />
             ) : (
-              <div className="flex h-full flex-col items-center justify-center gap-2 text-txt-muted">
-                <Gamepad2 size={32} className="opacity-50" />
-                <p className="text-[13px]">게임 화면을 캡처해봐 (선택)</p>
-              </div>
+              <>
+                {/* 후면 라이브(동시 모드) 또는 순차 촬영 중 표시용 */}
+                <video
+                  ref={rearVideoRef}
+                  className={cn("h-full w-full object-cover", !dual && !capturing && "hidden")}
+                  muted
+                  playsInline
+                />
+                {!dual && !capturing && (
+                  <div className="flex h-full flex-col items-center justify-center gap-2 text-txt-muted">
+                    <Gamepad2 size={32} className="opacity-50" />
+                    <p className="text-[13px]">동시 촬영을 누르면 전면+후면을 한 번에 찍어</p>
+                  </div>
+                )}
+              </>
             )}
             <div className="absolute left-3 top-3 h-28 w-20 overflow-hidden rounded-lg border-2 border-bg-tertiary bg-bg-floating shadow-elev-high">
               {selfie ? (
                 // eslint-disable-next-line @next/next/no-img-element
                 <img src={selfie} alt="셀카" className="h-full w-full object-cover" />
               ) : (
-                <video
-                  ref={videoRef}
-                  className={cn("h-full w-full object-cover", facing === "user" && "-scale-x-100")}
-                  muted
-                  playsInline
-                />
+                <video ref={frontVideoRef} className="h-full w-full -scale-x-100 object-cover" muted playsInline />
               )}
             </div>
+            {dual && !captured && (
+              <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-xxs font-bold text-white">
+                전면+후면 동시 📸
+              </span>
+            )}
+            {capturing && (
+              <span className="absolute bottom-2 right-2 animate-pulse-rec rounded-full bg-black/60 px-2 py-0.5 text-xxs font-bold text-white">
+                후면 촬영 중...
+              </span>
+            )}
           </div>
 
           <div className="flex gap-2">
-            <button className="btn btn-sm flex-1" onClick={captureSelfie} disabled={!camReady || !!selfie}>
-              <Camera size={14} /> {selfie ? "셀카 완료 ✓" : camReady ? "찰칵" : "카메라 없음"}
-            </button>
-            {hasMultiCam && (
-              <button
-                className="btn btn-sm btn-ghost shrink-0"
-                onClick={flipCamera}
-                title={facing === "user" ? "후면 카메라로 전환" : "전면 카메라로 전환"}
-              >
-                <SwitchCamera size={14} /> {facing === "user" ? "후면" : "전면"}
+            {captured ? (
+              <button className="btn btn-sm btn-ghost flex-1" onClick={retake} disabled={capturing}>
+                다시 찍기
+              </button>
+            ) : (
+              <button className="btn btn-sm flex-1" onClick={captureBoth} disabled={!frontReady || capturing}>
+                <Camera size={14} />{" "}
+                {capturing ? "촬영 중..." : frontReady ? "동시 촬영 📸" : "카메라 없음"}
               </button>
             )}
             <button className="btn btn-sm btn-ghost flex-1" onClick={captureScreen}>
-              <MonitorUp size={14} /> {screen ? "화면 다시 캡처" : "게임 화면 캡처"}
+              <MonitorUp size={14} /> {screen ? "화면 다시 캡처" : "게임 화면 캡처 (선택)"}
             </button>
           </div>
 
@@ -218,9 +290,13 @@ export default function NowPage() {
           {checkInToday ? (
             <div className="card overflow-hidden p-0">
               <div className="relative aspect-video bg-bg-tertiary">
-                {checkInToday.screen ? (
+                {checkInToday.screen ?? checkInToday.rear ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={checkInToday.screen} alt="게임 화면" className="h-full w-full object-cover" />
+                  <img
+                    src={checkInToday.screen ?? checkInToday.rear}
+                    alt="후면/게임 화면"
+                    className="h-full w-full object-cover"
+                  />
                 ) : (
                   <div
                     className="flex h-full items-center justify-center"
