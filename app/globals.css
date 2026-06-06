@@ -1,0 +1,95 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-base: "gg sans", "Pretendard Variable", Pretendard, "Noto Sans KR",
+    "Malgun Gothic", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--font-base);
+  background: #1e1f22;
+  color: #dbdee1;
+  font-size: 15px;
+  line-height: 1.375;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Discord 스타일 스크롤바 */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: #1a1b1e transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: #1a1b1e;
+  border-radius: 4px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* 그룹 라벨 (11px uppercase) */
+.group-label {
+  @apply text-xxs font-bold uppercase text-txt-muted;
+}
+
+/* 채널 아이템 */
+.channel-item {
+  @apply flex h-8 items-center gap-2 rounded px-2 text-sm font-medium text-txt-muted transition-colors duration-100;
+}
+.channel-item:hover {
+  @apply bg-bg-modifier text-txt-normal;
+}
+.channel-item.active {
+  @apply bg-bg-modifier text-txt-header;
+}
+
+/* 기본 버튼 */
+.btn {
+  @apply inline-flex h-[38px] items-center justify-center gap-2 rounded px-4 text-sm font-medium text-white transition-colors duration-100 disabled:cursor-not-allowed disabled:opacity-50;
+  background: #5865f2;
+}
+.btn:hover:not(:disabled) {
+  background: #4752c4;
+}
+.btn-sm {
+  @apply h-8 px-3 text-[13px];
+}
+.btn-ghost {
+  background: transparent;
+  @apply text-txt-muted;
+}
+.btn-ghost:hover:not(:disabled) {
+  background: #404249;
+  @apply text-txt-normal;
+}
+.btn-danger {
+  background: #da373c;
+}
+.btn-danger:hover:not(:disabled) {
+  background: #a12828;
+}
+.btn-success {
+  background: #23a55a;
+}
+.btn-success:hover:not(:disabled) {
+  background: #1a7d44;
+}
+
+.card {
+  @apply rounded-lg bg-bg-secondary p-4;
+}
+
+.input {
+  @apply h-10 w-full rounded-lg border-none bg-bg-input px-3 text-[15px] text-txt-normal outline-none placeholder:text-txt-faint;
+}
