@@ -90,7 +90,7 @@ export default function WrappedPage() {
       </div>
 
       <Link
-        href="/diary"
+        href="/vlog"
         onClick={(e) => e.stopPropagation()}
         className="absolute right-4 top-8 z-10 rounded-full bg-black/30 p-2 text-white hover:bg-black/50"
       >

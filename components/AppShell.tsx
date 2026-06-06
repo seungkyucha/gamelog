@@ -6,7 +6,6 @@ import type { Member } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import {
   Activity,
-  BookOpen,
   Eye,
   Gamepad2,
   Gift,
@@ -27,12 +26,11 @@ const CHANNELS = [
   { group: "오늘", items: [
     { href: "/feed", name: "게임-피드", icon: Activity },
     { href: "/vlog", name: "오늘의-브이로그", icon: Video },
-    { href: "/moments", name: "순간-포착", icon: Zap },
+    { href: "/moments", name: "potg", icon: Zap },
     { href: "/now", name: "지금-뭐해", icon: Eye },
   ]},
   { group: "기록", items: [
     { href: "/quests", name: "데일리-퀘스트", icon: Target },
-    { href: "/diary", name: "게임-다이어리", icon: BookOpen },
     { href: "/wrapped", name: "wrapped", icon: Gift },
   ]},
 ];
@@ -172,10 +170,9 @@ function MemberList() {
 const MOBILE_LABELS: Record<string, string> = {
   "/feed": "피드",
   "/vlog": "브이로그",
-  "/moments": "순간",
+  "/moments": "POTG",
   "/now": "지금",
   "/quests": "퀘스트",
-  "/diary": "다이어리",
 };
 
 function MobileNav() {

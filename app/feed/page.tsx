@@ -2,22 +2,38 @@
 
 import { Avatar } from "@/components/Avatar";
 import { ChannelHeader } from "@/components/ChannelHeader";
+import { ClipMedia } from "@/components/ClipCard";
 import { generateFeed, type FeedEvent, type FeedType } from "@/lib/feed";
 import { GAMES, ME_ID, MEMBERS } from "@/lib/seed";
 import { useStore } from "@/lib/store";
+import type { Clip } from "@/lib/types";
 import { cn, fmtTime } from "@/lib/utils";
 import { Activity, Link2, Link2Off, Medal, Play, Swords, TrendingUp } from "lucide-react";
+import Link from "next/link";
 import { useMemo, useState } from "react";
 
-type Filter = "all" | FeedType;
+type Filter = "all" | FeedType | "clip";
 
 const FILTERS: { key: Filter; label: string }[] = [
   { key: "all", label: "전체" },
+  { key: "clip", label: "📹 클립" },
   { key: "start", label: "🎮 접속" },
   { key: "match", label: "⚔️ 전적" },
   { key: "achievement", label: "🏅 업적" },
   { key: "rank", label: "📈 랭크" },
 ];
+
+/** 피드 아이템: 연동 이벤트 또는 파티원 클립(브이로그/POTG) */
+type FeedItem =
+  | { kind: "event"; time: number; e: FeedEvent }
+  | { kind: "clip"; time: number; c: Clip };
+
+const CLIP_LABEL: Record<Clip["kind"], { label: string; href: string }> = {
+  vlog: { label: "브이로그", href: "/vlog" },
+  moment: { label: "POTG", href: "/moments" },
+  quest: { label: "퀘스트 인증", href: "/quests" },
+  now: { label: "체크인", href: "/now" },
+};
 
 function SourceBadge({ source }: { source: "steam" | "opgg" }) {
   return source === "steam" ? (
@@ -207,26 +223,74 @@ function EventCard({ e }: { e: FeedEvent }) {
   );
 }
 
-/** Steam / OP.GG 연동 게임 활동 피드 */
+/** 파티원 클립(브이로그/POTG)을 피드 카드로 노출 */
+function ClipFeedCard({ c }: { c: Clip }) {
+  const member = MEMBERS.find((m) => m.id === c.memberId)!;
+  const game = GAMES.find((g) => g.id === c.gameId)!;
+  const meta = CLIP_LABEL[c.kind];
+  const isMe = c.memberId === ME_ID;
+
+  return (
+    <Link href={meta.href} className="card flex gap-3 p-3 transition-colors hover:bg-bg-modifier/40">
+      <Avatar member={member} size={36} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-1.5">
+          <span className="text-[14px] font-bold text-txt-header">{isMe ? "나" : member.name}</span>
+          <span
+            className={cn(
+              "rounded px-1.5 py-0.5 text-[10px] font-bold text-white",
+              c.kind === "moment" ? "bg-accent-fuchsia" : c.kind === "quest" ? "bg-accent-yellow text-black" : "bg-brand"
+            )}
+          >
+            {meta.label}
+          </span>
+          <span className="ml-auto text-xxs text-txt-faint">{fmtTime(c.hour, c.minute)}</span>
+        </div>
+        <p className="mt-1 truncate text-[14px] text-txt-normal">
+          <span className="font-semibold" style={{ color: game.color }}>
+            {game.emoji} {game.short}
+          </span>{" "}
+          · {c.caption}
+        </p>
+      </div>
+      <div className="h-16 w-24 shrink-0 overflow-hidden rounded-lg">
+        <ClipMedia clip={c} />
+      </div>
+    </Link>
+  );
+}
+
+/** Steam / OP.GG 연동 게임 활동 피드 + 파티 클립 통합 스트림 */
 export default function FeedPage() {
-  const { now, today, integrations } = useStore();
+  const { now, today, integrations, todayClips } = useStore();
   const [filter, setFilter] = useState<Filter>("all");
 
   const linkedAny = Boolean(integrations.steam || integrations.riot);
 
-  const events = useMemo(
-    () => generateFeed(today, now.getHours(), now.getMinutes(), linkedAny),
-    [today, now, linkedAny]
-  );
+  const items = useMemo<FeedItem[]>(() => {
+    const events = generateFeed(today, now.getHours(), now.getMinutes(), linkedAny);
+    const merged: FeedItem[] = [
+      ...events.map((e): FeedItem => ({ kind: "event", time: e.hour * 60 + e.minute, e })),
+      ...todayClips
+        .filter((c) => c.kind === "vlog" || c.kind === "moment" || c.kind === "quest")
+        .map((c): FeedItem => ({ kind: "clip", time: c.hour * 60 + c.minute, c })),
+    ];
+    return merged.sort((a, b) => b.time - a.time); // 최신순
+  }, [today, now, linkedAny, todayClips]);
 
-  const filtered = filter === "all" ? events : events.filter((e) => e.type === filter);
+  const filtered =
+    filter === "all"
+      ? items
+      : filter === "clip"
+        ? items.filter((i) => i.kind === "clip")
+        : items.filter((i) => i.kind === "event" && i.e.type === filter);
 
   return (
     <>
       <ChannelHeader
         icon={Activity}
         name="게임-피드"
-        topic="Steam · OP.GG 연동 — 친구의 접속, 업적, 전적이 실시간으로 올라와."
+        topic="Steam · OP.GG 연동 + 파티 클립 — 접속, 업적, 전적, 브이로그, POTG가 한 줄로."
       />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[740px] space-y-4 p-4 pb-10">
@@ -277,9 +341,13 @@ export default function FeedPage() {
             </div>
           ) : (
             <div className="space-y-2">
-              {filtered.map((e) => (
-                <EventCard key={e.id} e={e} />
-              ))}
+              {filtered.map((item) =>
+                item.kind === "event" ? (
+                  <EventCard key={item.e.id} e={item.e} />
+                ) : (
+                  <ClipFeedCard key={item.c.id} c={item.c} />
+                )
+              )}
             </div>
           )}
         </div>

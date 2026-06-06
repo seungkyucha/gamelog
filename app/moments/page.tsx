@@ -24,8 +24,8 @@ export default function MomentsPage() {
     <>
       <ChannelHeader
         icon={Zap}
-        name="순간-포착"
-        topic="레전드 순간은 5초면 충분해. 편집? 그런 거 없어."
+        name="potg"
+        topic="오늘의 Play of the Game — 레전드 순간은 5초면 충분해."
       />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[740px] space-y-5 p-4 pb-10">
